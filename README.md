@@ -6,7 +6,7 @@ Multi-Contour Process Isolation and Side-Channel Defense Framework for Multi-Ten
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.0-purple.svg)](https://vitejs.dev/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21921488-blue.svg)](https://doi.org/10.5281/zenodo.21921488)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24528037.svg)](https://doi.org/10.5281/zenodo.24528037)
 [![Live Web Dashboard](https://img.shields.io/badge/Live%20Web-turtleshell.iqumnov.com-emerald.svg)](https://turtleshell.iqumnov.com)
 [![Author: Matvei Igumnov](https://img.shields.io/badge/Author-Matvei%20Igumnov-blue.svg)](https://github.com/Iqumnov)
 
@@ -208,7 +208,7 @@ If you use **TurtleShell** in your research, isolation benchmarks, or quantum cl
   year         = {2026},
   publisher    = {GitHub},
   version      = {0.1.0},
-  doi          = {10.5281/zenodo.21921488},
+  doi          = {10.5281/zenodo.24528037},
   url          = {https://github.com/Iqumnov/TurtleShell}
 }
 ```

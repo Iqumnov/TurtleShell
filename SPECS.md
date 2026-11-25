@@ -4,7 +4,7 @@
 **Target Architecture:** Multi-Tenant Quantum Cloud Process Isolation  
 **Author & Lead Architect:** Matvei Dmitrievich Igumnov (Moscow Poly)  
 **License:** MIT License  
-**Reference DOI:** [10.5281/zenodo.21921488](https://doi.org/10.5281/zenodo.21921488)  
+**Reference DOI:** [10.5281/zenodo.24528037](https://doi.org/10.5281/zenodo.24528037)  
 
 ---
 
