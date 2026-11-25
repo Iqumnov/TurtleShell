@@ -8,8 +8,8 @@ This document traces the mathematical equations from the papers directly to thei
 
 The inter-tenant coupler matrix $J_{ij}$ is partitioned using the Graph Laplacian:
 $$L = D - |J|$$
-where $D_{ii} = \sum_j |J_{ij}|$. Spectral partitioning solves the Fiedler vector (second smallest eigenvector) to minimize cross-boundary crosstalk coupling:
-$$\min_{\mathbf{x}} \sum_{i,j} |J_{ij}| (x_i - x_j)^2$$
+where $D_{ii} = \sum_j |J_{ij}|$. Spectral partitioning computes the Fiedler vector $\mathbf{v}_2$ (the eigenvector corresponding to the second smallest eigenvalue $\lambda_2$ of the Graph Laplacian $L$) to minimize cross-boundary crosstalk coupling subject to zero-sum and unit-norm constraints:
+$$\min_{\substack{\mathbf{x} \perp \mathbf{1} \\ \|\mathbf{x}\| = 1}} \mathbf{x}^T L \mathbf{x} = \frac{1}{2} \sum_{i,j} |J_{ij}| (x_i - x_j)^2$$
 
 * **Implementation**: `backend/app/simulation/scheduler.py` (`MultiTenantScheduler._allocate_spectral`)
 
@@ -35,7 +35,7 @@ $$\tau_b = \frac{1}{\eta} \ln \left( \frac{\bar{n}_0 - \dot{n}/\eta}{n^* - \dot{
 * $n^*$: target phonon threshold (default $0.2$)
 
 * **Implementation**: `backend/app/simulation/defense.py` (`LaserCoolingBuffer.compute_ion_cooling_time`)
-* **Reference Test**: `tests/test_contour3_physics.py` ($\tau_b = 0.6908\text{ s}$ for baseline test parameters).
+* **Reference Test**: `tests/test_contour3_physics.py` ($\tau_b \approx 0.6907\text{ s}$ for baseline test parameters: $\bar{n}_0=100.0, \dot{n}=1.0, \eta=10.0, n^*=0.2$).
 
 ---
 
