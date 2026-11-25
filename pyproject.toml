@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum-isolation-benchmark"
+version = "0.1.0"
+description = "Quantum Cloud Multi-Tenant Isolation Benchmarking Framework & TurtleShell Protection Enclave"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Matvei D. Igumnov", email = "matvei@iqumnov.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Security"
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "scikit-learn>=1.2.0",
+    "networkx>=3.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "pydantic>=2.0",
+    "click>=8.0"
+]
+
+[project.scripts]
+qib = "quantum_isolation_benchmark.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Iqumnov/TurtleShell"
+Repository = "https://github.com/Iqumnov/TurtleShell"
+"Bug Tracker" = "https://github.com/Iqumnov/TurtleShell/issues"
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "packages/quantum-isolation-benchmark",
+    "packages/turtleshell-live/backend"
+]
+testpaths = [
+    "packages/quantum-isolation-benchmark/tests",
+    "packages/turtleshell-live/backend/tests"
+]

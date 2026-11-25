@@ -1,0 +1,27 @@
+{
+  "name": "turtleshell-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TurtleShell — Quantum Cloud Isolation Research Platform",
+  "scripts": {
+    "dev:frontend": "pnpm --filter turtleshell-live-frontend dev",
+    "build:frontend": "pnpm --filter turtleshell-live-frontend build",
+    "dev:backend": "cd packages/turtleshell-live/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "test:backend": "cd packages/turtleshell-live/backend && pytest",
+    "test:cli": "cd packages/quantum-isolation-benchmark && pytest",
+    "install:python": "pip install -e packages/quantum-isolation-benchmark && pip install -r packages/turtleshell-live/backend/requirements.txt"
+  },
+  "keywords": [
+    "quantum",
+    "security",
+    "isolation",
+    "crosstalk",
+    "qiskit",
+    "threejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

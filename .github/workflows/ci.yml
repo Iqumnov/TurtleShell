@@ -1,0 +1,59 @@
+name: TurtleShell CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-python:
+    name: Backend & Benchmark Tests
+    runs-on: ubuntu-latest
+    env:
+      # Ensure GNU OpenMP runtime is preloaded to avoid static TLS exhaustion
+      LD_PRELOAD: /usr/lib/x86_64-linux-gnu/libgomp.so.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e packages/quantum-isolation-benchmark
+          pip install -r packages/turtleshell-live/backend/requirements.txt
+          pip install pytest pytest-cov httpx
+
+      - name: Run full pytest test suite
+        run: |
+          pytest
+
+  build-frontend:
+    name: Frontend Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: packages/turtleshell-live/frontend
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build frontend
+        working-directory: packages/turtleshell-live/frontend
+        run: pnpm run build

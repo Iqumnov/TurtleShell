@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software in your work, please cite it as below."
+authors:
+  - family-names: "Igumnov"
+    given-names: "Matvei Dmitrievich"
+    orcid: "https://orcid.org/0009-0001-7924-1522"
+    email: "matvei@iqumnov.com"
+    affiliation: "Moscow Polytechnic University"
+title: "TurtleShell: A Multi-Contour Process Isolation Concept for Multi-Tenant Quantum Clouds"
+version: 0.1.0
+date-released: 2026-08-11
+url: "https://github.com/Iqumnov/TurtleShell"
+license: MIT
