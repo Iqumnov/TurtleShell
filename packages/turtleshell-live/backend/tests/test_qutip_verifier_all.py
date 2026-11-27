@@ -24,3 +24,38 @@ def test_qutip_verifier_evolution():
     if c3_res.get("has_qutip"):
         assert c3_res["max_abs_error"] is not None
         assert c3_res["max_abs_error"] < 1e-3
+
+
+def test_qutip_zz_crosstalk_matches_exact_liouvillian():
+    """Ensure QuTiP solver matches exact scipy Liouvillian fallback within 1e-4."""
+    import app.simulation.qutip_verifier as qv
+
+    verifier = qv.QuTiPVerifier("heron")
+    if not qv.HAS_QUTIP:
+        pytest.skip("QuTiP not installed")
+
+    qutip_res = verifier.simulate_zz_crosstalk_evolution(
+        t_max_us=5.0, n_steps=20, t1_us=172.0, t2_us=115.0, j_zz_khz=1.1, n_thermal=0.05
+    )
+    orig = qv.HAS_QUTIP
+    try:
+        qv.HAS_QUTIP = False
+        exact_res = verifier.simulate_zz_crosstalk_evolution(
+            t_max_us=5.0, n_steps=20, t1_us=172.0, t2_us=115.0, j_zz_khz=1.1, n_thermal=0.05
+        )
+    finally:
+        qv.HAS_QUTIP = orig
+
+    max_diff = max(abs(a - b) for a, b in zip(qutip_res["fidelity"], exact_res["fidelity"]))
+    assert max_diff < 1e-4
+
+
+def test_qutip_cooling_zero_rate_no_oom():
+    """Ensure eta == 0 pure heating branch computes finite trajectory without OOM."""
+    verifier = QuTiPVerifier("ion_trap")
+    res = verifier.verify_contour3_cooling(n0=2.0, eta=0.0, n_dot=0.5, tau_s=1.0)
+    assert len(res["n_bar_analytical"]) == 100
+    assert abs(res["n_bar_analytical"][-1] - 2.5) < 1e-9
+    if res.get("has_qutip"):
+        assert res["max_abs_error"] is not None
+        assert res["max_abs_error"] < 1e-3

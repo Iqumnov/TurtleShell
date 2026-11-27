@@ -39,7 +39,7 @@ Given an initial excited phonon state $\bar{n}(0) = \bar{n}_0$ resulting from an
 - Asymptotic heating limit: $n_\infty = \frac{\dot{n}}{\eta} = 0.1 < n^*$
 
 Evaluating the formula:
-$$\tau_b = \frac{1}{10.0} \ln \left( \frac{100.0 - 0.1}{0.2 - 0.1} \right) = 0.1 \times \ln(999) \approx 0.6908\,\text{seconds}$$
+$$\tau_b = \frac{1}{10.0} \ln \left( \frac{100.0 - 0.1}{0.2 - 0.1} \right) = 0.1 \times \ln(999) \approx 0.6907\,\text{seconds}$$
 
 This numerical value is verified against the analytical ODE and Lindblad master equation in `packages/turtleshell-live/backend/tests/test_contour3_physics.py` and `test_simulation.py`.
 

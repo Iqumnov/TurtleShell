@@ -3,6 +3,7 @@ import { useSimStore } from '../store/useSimStore';
 import { QubitState } from '../store/useSimStore';
 import { translations } from '../locales/translations';
 import { CustomSelect } from './CustomSelect';
+import { getTenantColor } from '../utils/tenantColors';
 
 interface Stabilizer {
   qubitIds: number[];
@@ -89,24 +90,6 @@ function generateStabilizers(qubits: QubitState[], adjList: Map<number, number[]
   return stabilizers;
 }
 
-export const TENANT_COLORS: string[] = [
-  '#52b788', // 0. Vintage Sage Green
-  '#e63946', // 1. Vintage Rust Red
-  '#f4a261', // 2. Vintage Burnt Amber
-  '#e9c46a', // 3. Vintage Mustard Yellow
-  '#2a9d8f', // 4. Vintage Washed Teal
-  '#457b9d', // 5. Vintage Faded Indigo
-  '#9d4edd', // 6. Vintage Dusty Plum
-  '#d62828', // 7. Vintage Terracotta Red
-  '#8d99ae', // 8. Vintage Muted Slate
-  '#48cae4', // 9. Vintage Hologram Cyan
-];
-
-export const getTenantColor = (tenantId: number | null): string => {
-  if (tenantId === null) return '#ffffff';
-  return TENANT_COLORS[tenantId % TENANT_COLORS.length];
-};
-
 export const Chip3DViewer: React.FC = () => {
   const store = useSimStore();
   const metrics = store.metrics;
@@ -125,7 +108,7 @@ export const Chip3DViewer: React.FC = () => {
   const lang = store.language;
   const t = translations[lang];
 
-  const [hoveredQubit, setHoveredQubit] = useState<QubitState | null>(null);
+  const [hoveredQubitId, setHoveredQubitId] = useState<number | null>(null);
   const [animFrame, setAnimFrame] = useState(0);
 
   
@@ -137,12 +120,12 @@ export const Chip3DViewer: React.FC = () => {
   const [svgElement, setSvgElement] = useState<SVGSVGElement | null>(null);
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
 
-  // Animate pulses/effects every tick
+  // Animate pulses/effects every tick when playing live (paused during rewind scrubbing)
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || scrubIndex !== null) return;
     const id = setInterval(() => setAnimFrame(f => f + 1), 120);
     return () => clearInterval(id);
-  }, [connected]);
+  }, [connected, scrubIndex]);
 
   // Native non-passive listeners for smooth, lag-free mouse wheel zoom & prevent page scrolling
   useEffect(() => {
@@ -319,9 +302,24 @@ export const Chip3DViewer: React.FC = () => {
   };
   // ──────────────────────────────────────────────────────────────────────────
 
-  // Mouse drag and panning handlers (convert client px delta into SVG viewBox units)
+  const hoveredQubit = hoveredQubitId !== null ? (qubits.find(q => q.id === hoveredQubitId) ?? null) : null;
+
+  const fmtTime = (us: number): string => {
+    if (!isFinite(us) || isNaN(us) || us <= 0) return '—';
+    const isRu = lang === 'RU';
+    const sec = us / 1e6;
+    if (sec >= 1) return `${sec.toPrecision(3).replace(/\.?0+$/, '')} ${isRu ? 'с' : 's'}`;
+    if (us >= 1e3) return `${(us / 1e3).toPrecision(3).replace(/\.?0+$/, '')} ${isRu ? 'мс' : 'ms'}`;
+    return `${us.toFixed(1)} ${isRu ? 'мкс' : 'µs'}`;
+  };
+
+  // Mouse drag and panning handlers (exact SVG CTM inversion accounts for preserveAspectRatio letterboxing)
   const getClientToSvgScale = () => {
     if (!svgElement) return { sx: 1, sy: 1 };
+    const ctm = svgElement.getScreenCTM();
+    if (ctm && ctm.a > 0 && ctm.d > 0) {
+      return { sx: 1 / ctm.a, sy: 1 / ctm.d };
+    }
     const rect = svgElement.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return { sx: 1, sy: 1 };
     return { sx: W / rect.width, sy: H / rect.height };
@@ -433,17 +431,17 @@ export const Chip3DViewer: React.FC = () => {
                 const isIdle = q.active_tenant === null;
                 const r = baseR;
 
-                let color = getTenantColor(q.active_tenant);
-                let nodeOpacity = 0.95;
+                const color = getTenantColor(q.active_tenant);
+                const nodeOpacity = 0.95;
 
                 // 100% Physics-Driven Contour-Specific Heatmap calculation
                 const isVictim = q.active_tenant === 0;
 
-                // 1. Empirical physical baseline error rate from backend telemetry
+                // 1. Empirical physical baseline error rate from active (or scrubbed) telemetry
                 const baseErr1q = (q.err_1q ?? 0.0015);
                 const baseErrReadout = (q.err_readout ?? 0.008);
-                const phononVal = (metrics.phonon_number ?? 0.05);
-                const rfLeakage = (metrics.rf_leakage_db ?? -60.0);
+                const phononVal = activeQpu.phonon_number ?? (isScrubbing ? (history.phonon[clampedScrub] ?? 0.05) : (metrics.phonon_number ?? 0.05));
+                const rfLeakage = activeQpu.rf_leakage_db ?? (metrics.rf_leakage_db ?? -60.0);
 
                 let physicalNoise = baseErr1q * 100.0 + baseErrReadout * 10.0;
 
@@ -543,7 +541,7 @@ export const Chip3DViewer: React.FC = () => {
                   }
                 }
 
-                const isHovered = hoveredQubit?.id === q.id;
+                const isHovered = hoveredQubitId === q.id;
 
                 return (
                   <g key={`q-${q.id}`}>
@@ -589,8 +587,8 @@ export const Chip3DViewer: React.FC = () => {
                       strokeWidth={1}
                       fillOpacity={nodeOpacity}
                       className="cursor-pointer transition-all duration-150"
-                      onMouseEnter={() => setHoveredQubit(q)}
-                      onMouseLeave={() => setHoveredQubit(null)}
+                      onMouseEnter={() => setHoveredQubitId(q.id)}
+                      onMouseLeave={() => setHoveredQubitId(null)}
                     />
 
                     {/* Qubit ID number */}
@@ -620,11 +618,13 @@ export const Chip3DViewer: React.FC = () => {
         {hoveredQubit && (() => {
           const pos = coordMap.get(hoveredQubit.id);
           if (!pos) return null;
-          const left = Math.min(W - 160, Math.max(10, pos.x + 15));
-          const top = Math.min(H - 120, Math.max(10, pos.y - 40));
+          const sx = viewState.x + pos.x * viewState.scale;
+          const sy = viewState.y + pos.y * viewState.scale;
+          const left = Math.min(W - 190, Math.max(10, sx + 15));
+          const top = Math.min(H - 135, Math.max(10, sy - 40));
           const baseT1 = getQubitBaseT1();
-          const t1Micro = (hoveredQubit.t1 ?? baseT1).toFixed(1);
-          const t2Micro = (hoveredQubit.t2 ?? (baseT1 * 0.65)).toFixed(1);
+          const t1Val = hoveredQubit.t1 ?? baseT1;
+          const t2Val = hoveredQubit.t2 ?? (baseT1 * 0.65);
 
           return (
             <div
@@ -634,14 +634,14 @@ export const Chip3DViewer: React.FC = () => {
               <div className="font-bold border-b border-[var(--border-color)] pb-1 flex justify-between">
                 <span>QUBIT Q{hoveredQubit.id}</span>
                 <span className="text-[var(--text-muted)]">
-                  {hoveredQubit.active_tenant === null ? t.qubitIdle : `Tenant ${hoveredQubit.active_tenant}`}
+                  {hoveredQubit.active_tenant === null ? t.qubitIdle : `${t.qubitTenant} ${hoveredQubit.active_tenant}`}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-1 text-xs">
                 <span className="text-[var(--text-muted)]">T1:</span>
-                <span className="font-bold">{t1Micro} µs</span>
+                <span className="font-bold">{fmtTime(t1Val)}</span>
                 <span className="text-[var(--text-muted)]">T2:</span>
-                <span className="font-bold">{t2Micro} µs</span>
+                <span className="font-bold">{fmtTime(t2Val)}</span>
                 <span className="text-[var(--text-muted)]">{t.qubit1qErr}</span>
                 <span className="font-bold">{((hoveredQubit.err_1q ?? 0.001) * 100).toFixed(2)}%</span>
                 <span className="text-[var(--text-muted)]">{t.qubitReadout}</span>
@@ -655,14 +655,14 @@ export const Chip3DViewer: React.FC = () => {
       </div>
 
       {/* Clean Timeline Scrubber & Simulation Controls */}
-      <div className="bg-[var(--inset-bg)] border-t border-[var(--border-color)] p-2.5 flex items-center justify-between font-mono text-xs gap-2.5 select-none">
+      <div className="bg-[var(--inset-bg)] border-t border-[var(--border-color)] p-2.5 flex flex-wrap items-center justify-between font-mono text-xs gap-2.5 select-none">
         
         {/* Buttons Group */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => { connected ? disconnectWS() : connectWS(); }}
             className="hud-button py-1 px-2 font-bold text-xs"
-            title={connected ? "Pause Telemetry" : "Start Telemetry"}
+            title={connected ? (lang === 'RU' ? 'Пауза телеметрии' : 'Pause Telemetry') : (lang === 'RU' ? 'Запуск телеметрии' : 'Start Telemetry')}
           >
             {connected ? (
               <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
@@ -679,7 +679,7 @@ export const Chip3DViewer: React.FC = () => {
           <button
             onClick={() => resetSim()}
             className="hud-button py-1 px-2 font-bold text-xs"
-            title="Reset Simulation"
+            title={lang === 'RU' ? 'Сброс симуляции' : 'Reset Simulation'}
           >
             <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M2 6a4 4 0 1 1 1.2 2.8" />
@@ -695,7 +695,7 @@ export const Chip3DViewer: React.FC = () => {
             }}
             className="hud-button py-1 px-2 font-bold text-xs"
             disabled={history.qpu.length === 0}
-            title="Jump to Start"
+            title={lang === 'RU' ? 'В начало шкалы' : 'Jump to Start'}
           >
             <svg width="12" height="10" viewBox="0 0 14 12" fill="currentColor">
               <line x1="1.5" y1="1" x2="1.5" y2="11" stroke="currentColor" strokeWidth="1.5" />
@@ -713,7 +713,7 @@ export const Chip3DViewer: React.FC = () => {
             }}
             className="hud-button py-1 px-2 font-bold text-xs"
             disabled={history.qpu.length === 0}
-            title="Previous Step"
+            title={lang === 'RU' ? 'Предыдущий шаг' : 'Previous Step'}
           >
             <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
               <line x1="1.5" y1="1" x2="1.5" y2="11" stroke="currentColor" strokeWidth="1.5" />
@@ -734,7 +734,7 @@ export const Chip3DViewer: React.FC = () => {
             }}
             className="hud-button py-1 px-2 font-bold text-xs"
             disabled={scrubIndex === null}
-            title="Next Step"
+            title={lang === 'RU' ? 'Следующий шаг' : 'Next Step'}
           >
             <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
               <polygon points="1,1 7.5,6 1,11" />

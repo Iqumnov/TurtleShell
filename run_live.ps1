@@ -26,19 +26,34 @@ if (Test-Path $VenvPython) {
     Write-Host "[*] Python .venv not found. Operating in standalone client-side engine mode." -ForegroundColor Yellow
 }
 
-# 2. Launch Frontend
+# 2. Launch Frontend (prefer pnpm, fallback to npm)
+$PnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
 $NpmCmd = Get-Command npm -ErrorAction SilentlyContinue
-if ($NpmCmd -and (Test-Path $FrontendDir)) {
-    Push-Location $FrontendDir
+if (($PnpmCmd -or $NpmCmd) -and (Test-Path $FrontendDir)) {
     $NodeModules = Join-Path $FrontendDir "node_modules"
-    if (-not (Test-Path $NodeModules)) {
-        Write-Host "[*] Installing frontend dependencies..." -ForegroundColor Green
-        & $NpmCmd.Source install
+    if ($PnpmCmd) {
+        if (-not (Test-Path $NodeModules)) {
+            Write-Host "[*] Installing frontend dependencies with pnpm..." -ForegroundColor Green
+            Push-Location $ScriptDir
+            & $PnpmCmd.Source install --frozen-lockfile
+            Pop-Location
+        }
+        Write-Host "[+] Starting frontend on http://localhost:5173..." -ForegroundColor Green
+        Start-Process "http://localhost:5173"
+        Push-Location $ScriptDir
+        & $PnpmCmd.Source --filter turtleshell-live-frontend dev
+        Pop-Location
+    } else {
+        Push-Location $FrontendDir
+        if (-not (Test-Path $NodeModules)) {
+            Write-Host "[*] Installing frontend dependencies with npm..." -ForegroundColor Green
+            & $NpmCmd.Source install
+        }
+        Write-Host "[+] Starting frontend on http://localhost:5173..." -ForegroundColor Green
+        Start-Process "http://localhost:5173"
+        & $NpmCmd.Source run dev
+        Pop-Location
     }
-    Write-Host "[+] Starting frontend on http://localhost:5173..." -ForegroundColor Green
-    Start-Process "http://localhost:5173"
-    & $NpmCmd.Source run dev
-    Pop-Location
 } else {
     Write-Host "[+] Frontend dependencies absent. Launching in-browser simulation: https://turtleshell.iqumnov.com" -ForegroundColor Cyan
     Start-Process "https://turtleshell.iqumnov.com"

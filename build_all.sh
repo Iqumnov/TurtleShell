@@ -33,7 +33,7 @@ n_inf = ndot / eta
 assert n_star > n_inf, 'Target threshold must exceed asymptotic heating limit'
 tau_b = (1.0 / eta) * math.log((n0 - n_inf) / (n_star - n_inf))
 print(f'Contour 3 Laser Cooling Buffer tau_b: {tau_b:.4f} s')
-assert abs(tau_b - 0.6908) < 1e-3, f'Expected 0.6908s, got {tau_b}'
+assert abs(tau_b - 0.6907) < 1e-3, f'Expected 0.6907s, got {tau_b}'
 "
 
 echo "[+] 3. Checking Lean 4 formal proofs (if lake available)..."
@@ -47,14 +47,14 @@ else
     echo "[*] lake not present, skipping Lean 4 proof build."
 fi
 
-echo "[+] 4. Checking frontend build (if pnpm/npm available)..."
+echo "[+] 4. Checking frontend lint & build (if pnpm/npm available)..."
 if [ -d "${ROOT_DIR}/packages/turtleshell-live/frontend/node_modules" ]; then
     if command -v pnpm >/dev/null 2>&1; then
-        (cd "${ROOT_DIR}" && pnpm --filter turtleshell-live-frontend build)
+        (cd "${ROOT_DIR}" && pnpm --filter turtleshell-live-frontend lint && pnpm --filter turtleshell-live-frontend build)
     elif command -v corepack >/dev/null 2>&1; then
-        (cd "${ROOT_DIR}" && corepack pnpm --filter turtleshell-live-frontend build)
+        (cd "${ROOT_DIR}" && corepack pnpm --filter turtleshell-live-frontend lint && corepack pnpm --filter turtleshell-live-frontend build)
     elif command -v npm >/dev/null 2>&1; then
-        (cd "${ROOT_DIR}/packages/turtleshell-live/frontend" && npm run build)
+        (cd "${ROOT_DIR}/packages/turtleshell-live/frontend" && npm run lint && npm run build)
     fi
 else
     echo "[*] node_modules not present, skipping Vite build."

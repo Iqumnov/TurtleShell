@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useSimStore } from '../store/useSimStore';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
+const USE_PROXY = import.meta.env.VITE_USE_PROXY === 'true';
+
 // Derive backend URL from the same source as the WS store to support deployment
 const BACKEND_WS_HOST = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost')
   ? `${window.location.hostname}:8000`
@@ -14,24 +16,26 @@ export const AcademicPanel: React.FC = () => {
   const [qutipData, setQutipData] = useState<any>(null);
   const [activeSubTab, setActiveSubTab] = useState<'zz' | 'c3'>('zz');
 
-  const fetchQuTiPVerification = async () => {
-    if (typeof window !== 'undefined') {
-      const host = window.location.hostname;
-      if (window.location.protocol === 'https:' || (host !== 'localhost' && host !== '127.0.0.1')) {
-        return;
-      }
-    }
-    try {
-      const res = await fetch(`http://${BACKEND_WS_HOST}/api/qutip/verify`);
-      const data = await res.json();
-      setQutipData(data);
-    } catch (e) {
-      // Backend optional in standalone mode
-    }
-  };
-
   React.useEffect(() => {
-    fetchQuTiPVerification();
+    const isLocal = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (typeof window !== 'undefined' && !USE_PROXY && (window.location.protocol === 'https:' || !isLocal)) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const url = USE_PROXY ? '/api/qutip/verify' : `http://${BACKEND_WS_HOST}/api/qutip/verify`;
+
+    fetch(url, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setQutipData(data);
+      })
+      .catch(() => {
+        // Backend optional in standalone mode or request aborted
+      });
+
+    return () => controller.abort();
   }, [store.activeScenario, store.defenseL1, store.defenseL2, store.defenseL3, store.defenseL4, store.qpuType]);
 
   const zzData = qutipData?.zz_crosstalk?.times_us?.map((tVal: number, idx: number) => ({
@@ -117,7 +121,7 @@ export const AcademicPanel: React.FC = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={c3Data} margin={{ top: 25, right: 25, left: 45, bottom: 20 }}>
                       <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={10} tickLine={false} label={{ value: isRu ? 'Время τ (с)' : 'Time τ (s)', position: 'insideBottomRight', offset: -5, fill: 'var(--text-muted)', fontSize: 10 }} />
-                      <YAxis stroke="var(--text-muted)" domain={[0, 65]} padding={{ top: 20, bottom: 20 }} fontSize={10} tickLine={false} width={45} />
+                      <YAxis stroke="var(--text-muted)" domain={[0, 'auto']} padding={{ top: 20, bottom: 20 }} fontSize={10} tickLine={false} width={45} />
                       <Tooltip contentStyle={{ background: 'var(--panel-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '11px' }} />
                       <Legend verticalAlign="top" height={20} iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
                       <Line
@@ -173,7 +177,8 @@ export const AcademicPanel: React.FC = () => {
       </ul>
 
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Эффективность партиционирования и показания шума (SPECS §5.1):</p>
-      <table className="w-full text-left text-xs border-collapse border border-[var(--border-color)] mb-1">
+      <div className="w-full overflow-x-auto">
+      <table className="w-full min-w-[540px] text-left text-xs border-collapse border border-[var(--border-color)] mb-1">
         <thead>
           <tr className="bg-[var(--inset-bg)] border-b border-[var(--border-color)] text-[var(--text-main)]">
             <th className="p-1.5 font-bold">Платформа</th>
@@ -192,10 +197,10 @@ export const AcademicPanel: React.FC = () => {
             const isActive = store.metrics?.platform_type?.includes(row.key);
             const isolVal = isActive && store.metrics?.isolation_index !== undefined
               ? `${store.metrics.isolation_index}%`
-              : (row.key === 'trapped_ion' ? (store.defenseL1 ? '99.0%' : '52.4%')
-                : row.key === 'sr_optical' ? '100.0%'
-                : row.key === 'eagle' ? '39.4%'  // fixed couplers — L1 cannot improve isolation
-                : row.key === 'heron' ? (store.defenseL1 ? '85.0%' : '44.8%')
+              : (row.key === 'trapped_ion' ? (store.defenseL1 ? '99.7%' : '7.6%')
+                : row.key === 'sr_optical' ? (store.defenseL1 ? '100.0%' : '0.0%')
+                : row.key === 'eagle' ? (store.defenseL1 ? '88.0%' : '0.0%')
+                : row.key === 'heron' ? (store.defenseL1 ? '98.3%' : '6.8%')
                 : '—');
             return (
               <tr key={row.key} className={`border-b border-[var(--border-color)] ${isActive ? 'bg-[var(--inset-bg)] font-bold' : ''}`}>
@@ -211,6 +216,7 @@ export const AcademicPanel: React.FC = () => {
           })}
         </tbody>
       </table>
+      </div>
 
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Четыре контура защиты TurtleShell (SPECS §5):</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
@@ -242,7 +248,8 @@ export const AcademicPanel: React.FC = () => {
       </ul>
 
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Partitioning Efficiency & Noise Metrics (SPECS §5.1):</p>
-      <table className="w-full text-left text-xs border-collapse border border-[var(--border-color)] mb-1">
+      <div className="w-full overflow-x-auto">
+      <table className="w-full min-w-[540px] text-left text-xs border-collapse border border-[var(--border-color)] mb-1">
         <thead>
           <tr className="bg-[var(--inset-bg)] border-b border-[var(--border-color)] text-[var(--text-main)]">
             <th className="p-1.5 font-bold">Platform</th>
@@ -261,10 +268,10 @@ export const AcademicPanel: React.FC = () => {
             const isActive = store.metrics?.platform_type?.includes(row.key);
             const isolVal = isActive && store.metrics?.isolation_index !== undefined
               ? `${store.metrics.isolation_index}%`
-              : (row.key === 'trapped_ion' ? (store.defenseL1 ? '99.0%' : '52.4%')
-                : row.key === 'sr_optical' ? '100.0%'
-                : row.key === 'eagle' ? '39.4%'  // fixed couplers — L1 cannot improve isolation
-                : row.key === 'heron' ? (store.defenseL1 ? '85.0%' : '44.8%')
+              : (row.key === 'trapped_ion' ? (store.defenseL1 ? '99.7%' : '7.6%')
+                : row.key === 'sr_optical' ? (store.defenseL1 ? '100.0%' : '0.0%')
+                : row.key === 'eagle' ? (store.defenseL1 ? '88.0%' : '0.0%')
+                : row.key === 'heron' ? (store.defenseL1 ? '98.3%' : '6.8%')
                 : '—');
             return (
               <tr key={row.key} className={`border-b border-[var(--border-color)] ${isActive ? 'bg-[var(--inset-bg)] font-bold' : ''}`}>
@@ -280,6 +287,7 @@ export const AcademicPanel: React.FC = () => {
           })}
         </tbody>
       </table>
+      </div>
 
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Four TurtleShell Protection Contours (SPECS §5):</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">

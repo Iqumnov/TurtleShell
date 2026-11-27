@@ -92,6 +92,7 @@ interface SimStore {
     fidelity: number[];
     savings: number[];
     costs: number[];
+    wastedCash: number[];
     lossL4: number[];
     labels: string[];
     qpu: QpuState[];
@@ -155,12 +156,32 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const clientEngine = new ClientSimulationEngine();
 let clientTimer: ReturnType<typeof setInterval> | null = null;
 
+const USE_PROXY = import.meta.env.VITE_USE_PROXY === 'true';
+
+const isLocalHost = (): boolean =>
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const getBackendHttpUrl = (path: string): string => {
+  if (USE_PROXY) return path;
+  return `http://${BACKEND_URL}${path}`;
+};
+
+const getBackendWsUrl = (path: string): string => {
+  if (USE_PROXY && typeof window !== 'undefined') {
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProto}//${window.location.host}${path}`;
+  }
+  return `ws://${BACKEND_URL}${path}`;
+};
+
 const pushMetrics = (set: any, data: SimMetrics) => {
   set((state: SimStore) => {
     const nextLabels = [...state.history.labels, `#${data.time_step}`].slice(-40);
     const nextFidelity = [...state.history.fidelity, data.fidelity * 100].slice(-40);
     const nextSavings = [...state.history.savings, data.cumulative_savings].slice(-40);
     const nextCosts = [...state.history.costs, data.cumulative_costs].slice(-40);
+    const nextWastedCash = [...state.history.wastedCash, data.cumulative_wasted_cash ?? 0].slice(-40);
     const nextLossL4 = [...state.history.lossL4, data.autoencoder_loss_l4].slice(-40);
     const nextQpu = [...state.history.qpu, data.qpu].slice(-40);
     const nextZScore = [...state.history.zScore, data.monitor_z_score ?? 0].slice(-40);
@@ -173,6 +194,7 @@ const pushMetrics = (set: any, data: SimMetrics) => {
         fidelity: nextFidelity,
         savings: nextSavings,
         costs: nextCosts,
+        wastedCash: nextWastedCash,
         lossL4: nextLossL4,
         qpu: nextQpu,
         zScore: nextZScore,
@@ -182,20 +204,31 @@ const pushMetrics = (set: any, data: SimMetrics) => {
   });
 };
 
-const startClientSimulation = (set: any, get: any) => {
+const scheduleClientInterval = (set: any, get: any) => {
   if (clientTimer) {
     clearInterval(clientTimer);
     clientTimer = null;
   }
-  clientEngine.updateConfig(get());
-  pushMetrics(set, clientEngine.tick());
-  set({ connected: true });
   const intervalMs = Math.max(100, Math.round(1000 / Math.max(0.1, get().playbackSpeed || 1.0)));
   clientTimer = setInterval(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       pushMetrics(set, clientEngine.tick());
     }
   }, intervalMs);
+};
+
+const startClientSimulation = (set: any, get: any) => {
+  clientEngine.updateConfig(get());
+  pushMetrics(set, clientEngine.tick());
+  set({ connected: true });
+  scheduleClientInterval(set, get);
+};
+
+const ensureClientSimulation = (set: any, get: any) => {
+  if (clientTimer) return;
+  clientEngine.updateConfig(get());
+  set({ connected: true });
+  scheduleClientInterval(set, get);
 };
 
 const stopClientSimulation = () => {
@@ -216,7 +249,7 @@ const DEFAULT_ENGINE_CONFIG = {
   tenantCount: 3,
   schedulingAlgo: "random",
   activeScenario: "crosstalk",
-  crosstalkIntensity: 80,
+  crosstalkIntensity: 50,
   gateFrequencyHz: 1e6,
   rowhammerIterations: 600,
   primeDelayUs: 100,
@@ -242,6 +275,7 @@ export const useSimStore = create<SimStore>()(
     fidelity: [initialMetrics.fidelity * 100],
     savings: [initialMetrics.cumulative_savings],
     costs: [initialMetrics.cumulative_costs],
+    wastedCash: [initialMetrics.cumulative_wasted_cash ?? 0],
     lossL4: [initialMetrics.autoencoder_loss_l4],
     labels: [`#${initialMetrics.time_step}`],
     qpu: [initialMetrics.qpu],
@@ -261,7 +295,7 @@ export const useSimStore = create<SimStore>()(
 
   // Attack
   activeScenario: "crosstalk",
-  crosstalkIntensity: 80,
+  crosstalkIntensity: 50,
   gateFrequencyHz: 1e6,
   rowhammerIterations: 600,
   primeDelayUs: 100,
@@ -292,15 +326,25 @@ export const useSimStore = create<SimStore>()(
   setPlaybackSpeed: (speed: number) => {
     set({ playbackSpeed: speed });
     if (clientTimer) {
-      startClientSimulation(set, get);
+      scheduleClientInterval(set, get);
     }
     get().syncConfigWithBackend();
   },
 
   setConfigs: (configs) => {
-    const prevQpu = get().qpuType;
+    const prev = get();
+    const prevQpu = prev.qpuType;
+    const prevSpecies = prev.ionSpecies;
+    const prevNIons = prev.nIons;
     set(configs);
-    if (configs.qpuType && configs.qpuType !== prevQpu) {
+    const nextQpu = configs.qpuType ?? prevQpu;
+    const topologyChanged =
+      (configs.qpuType !== undefined && configs.qpuType !== prevQpu) ||
+      (nextQpu.includes('trapped_ion') &&
+        ((configs.ionSpecies !== undefined && configs.ionSpecies !== prevSpecies) ||
+         (configs.nIons !== undefined && configs.nIons !== prevNIons)));
+
+    if (topologyChanged) {
       clientEngine.updateConfig(get());
       clientEngine.reset();
       const fresh = clientEngine.tick();
@@ -311,6 +355,7 @@ export const useSimStore = create<SimStore>()(
           fidelity: [fresh.fidelity * 100],
           savings: [fresh.cumulative_savings],
           costs: [fresh.cumulative_costs],
+          wastedCash: [fresh.cumulative_wasted_cash ?? 0],
           lossL4: [fresh.autoencoder_loss_l4],
           labels: [`#${fresh.time_step}`],
           qpu: [fresh.qpu],
@@ -321,13 +366,14 @@ export const useSimStore = create<SimStore>()(
     } else {
       clientEngine.updateConfig(configs);
     }
+    if (configs.playbackSpeed !== undefined && clientTimer) {
+      scheduleClientInterval(set, get);
+    }
     get().syncConfigWithBackend();
   },
 
   syncConfigWithBackend: async () => {
-    const isLocal = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    if (!isLocal) return;
+    if (!isLocalHost() && !USE_PROXY) return;
 
     const state = get();
     const payload = {
@@ -352,7 +398,7 @@ export const useSimStore = create<SimStore>()(
       playback_speed: state.playbackSpeed,
     };
     try {
-      await fetch(`http://${BACKEND_URL}/api/simulation/configure`, {
+      await fetch(getBackendHttpUrl('/api/simulation/configure'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -377,20 +423,18 @@ export const useSimStore = create<SimStore>()(
     // Always start client simulation so telemetry is immediately live
     startClientSimulation(set, get);
 
-    const isLocal = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
-    if (!isLocal) {
+    const canConnectBackend = isLocalHost() || USE_PROXY;
+    if (!canConnectBackend) {
       // Standalone browser / Cloudflare Pages mode: client engine handles all physics
       return;
     }
 
     const attemptConnect = () => {
-      const primaryUrl = `ws://${BACKEND_URL}/api/simulation/stream`;
+      const primaryUrl = getBackendWsUrl('/api/simulation/stream');
       try {
         ws = new WebSocket(primaryUrl);
       } catch (e) {
-        startClientSimulation(set, get);
+        ensureClientSimulation(set, get);
         return;
       }
 
@@ -407,8 +451,8 @@ export const useSimStore = create<SimStore>()(
 
       ws.onclose = () => {
         ws = null;
-        startClientSimulation(set, get);
-        if (isLocal && !reconnectTimer) {
+        ensureClientSimulation(set, get);
+        if ((isLocalHost() || USE_PROXY) && !reconnectTimer) {
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
             attemptConnect();
@@ -417,7 +461,7 @@ export const useSimStore = create<SimStore>()(
       };
 
       ws.onerror = () => {
-        startClientSimulation(set, get);
+        ensureClientSimulation(set, get);
       };
     };
 
@@ -431,6 +475,7 @@ export const useSimStore = create<SimStore>()(
     }
     if (ws) {
       ws.onclose = null;
+      ws.onerror = null;
       ws.close();
       ws = null;
     }
@@ -442,10 +487,12 @@ export const useSimStore = create<SimStore>()(
     clientEngine.updateConfig(get());
     clientEngine.reset();
     const fresh = clientEngine.tick();
-    try {
-      await fetch(`http://${BACKEND_URL}/api/simulation/reset`, { method: "POST" });
-    } catch (e) {
-      // Backend offline, fallback client engine reset is sufficient
+    if (isLocalHost() || USE_PROXY) {
+      try {
+        await fetch(getBackendHttpUrl('/api/simulation/reset'), { method: "POST" });
+      } catch (e) {
+        // Backend offline, fallback client engine reset is sufficient
+      }
     }
     set({
       metrics: fresh,
@@ -453,6 +500,7 @@ export const useSimStore = create<SimStore>()(
         fidelity: [fresh.fidelity * 100],
         savings: [fresh.cumulative_savings],
         costs: [fresh.cumulative_costs],
+        wastedCash: [fresh.cumulative_wasted_cash ?? 0],
         lossL4: [fresh.autoencoder_loss_l4],
         labels: [`#${fresh.time_step}`],
         qpu: [fresh.qpu],
@@ -486,6 +534,7 @@ export const useSimStore = create<SimStore>()(
         defenseL4: state.defenseL4,
         hourlyCost: state.hourlyCost,
         utilization: state.utilization,
+        playbackSpeed: state.playbackSpeed,
         language: state.language,
         theme: state.theme,
       }),

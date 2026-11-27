@@ -43,7 +43,7 @@ export const MetricsPanel: React.FC = () => {
   if (!metrics) {
     return (
       <div className="w-full text-center text-[var(--text-muted)] font-mono text-xs p-4 hud-panel">
-        AWAITING TELEMETRY STREAM...
+        {t.awaitingTelemetryConsole}
       </div>
     );
   }
@@ -90,6 +90,7 @@ export const MetricsPanel: React.FC = () => {
                 <Line
                   {...LINE_PROPS}
                   dataKey="fidelity"
+                  name={`${t.fidelity} (%)`}
                   stroke="var(--text-main)"
                   activeDot={{ ...ACTIVE_DOT, stroke: 'var(--text-main)' }}
                 />
@@ -120,6 +121,7 @@ export const MetricsPanel: React.FC = () => {
                 <Line
                   {...LINE_PROPS}
                   dataKey="lossL4"
+                  name={t.aeLossLabel}
                   stroke="var(--text-main)"
                   activeDot={{ ...ACTIVE_DOT, stroke: 'var(--text-main)' }}
                 />
@@ -150,6 +152,7 @@ export const MetricsPanel: React.FC = () => {
                 <Line
                   {...LINE_PROPS}
                   dataKey="zScore"
+                  name={lang === 'RU' ? 'Z-счёт (σ)' : 'Z-Score (σ)'}
                   stroke="var(--text-main)"
                   activeDot={{ ...ACTIVE_DOT, stroke: 'var(--text-main)' }}
                 />

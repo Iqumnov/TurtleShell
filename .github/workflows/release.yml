@@ -29,9 +29,10 @@ jobs:
           node-version: 22
           cache: 'pnpm'
 
-      - name: Install & Build Frontend
+      - name: Lint & Build Frontend
         run: |
           pnpm install --frozen-lockfile
+          pnpm --filter turtleshell-live-frontend lint
           pnpm --filter turtleshell-live-frontend build
           tar -czvf turtleshell-live-frontend-dist.tar.gz -C packages/turtleshell-live/frontend dist
 
@@ -40,9 +41,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Build Python sdist & wheel
+      - name: Test Python Suite & Build QIB sdist/wheel
+        env:
+          LD_PRELOAD: /usr/lib/x86_64-linux-gnu/libgomp.so.1
         run: |
-          python -m pip install --upgrade pip build
+          python -m pip install --upgrade pip build pytest httpx
+          pip install -e packages/quantum-isolation-benchmark
+          pip install -r packages/turtleshell-live/backend/requirements.txt
+          pytest
           python -m build --outdir dist packages/quantum-isolation-benchmark
 
       - name: Generate SHA256SUMS.txt
@@ -61,3 +67,4 @@ jobs:
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

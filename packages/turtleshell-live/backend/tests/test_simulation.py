@@ -159,3 +159,37 @@ def test_fastapi_endpoints():
     assert data["n_ions"] == 25
     assert data["active_scenario"] == "rf_leakage"
     assert data["defense_l1"] is True
+
+
+def test_regression_fixes_sc_delay_l1_savings_and_ae():
+    """Regression guard: L1 Heron positive savings, SC delay recovery from 0, Ion+L1 no false AE."""
+    from app.main import sim, sim_lock, run_single_simulation_tick
+
+    with sim_lock:
+        # 1. Contour 3 superconducting delay recovers from 0.0 when re-enabled
+        buf = LaserCoolingBuffer()
+        buf.current_delay_us = 0.0
+        buf.adjust_policy(anomaly_detected=False, n_bar=0.0, heating_rate=0.0, cooling_rate=0.0, is_ion_trap=False)
+        assert buf.current_delay_us > 0.0
+
+        # 2. L1 on IBM Heron crosstalk records upstream avoided-loss credit
+        sim.qpu_type = "heron"
+        sim.active_scenario = "crosstalk"
+        sim.crosstalk_intensity = 80.0
+        sim.tenant_count = 4
+        sim.scheduling_algo = "spectral"
+        sim.defense_l1 = True
+        sim.defense_l2 = False
+        sim.defense_l3 = False
+        sim.defense_l4 = False
+        sim.rebuild_qpu()
+        payload_heron = run_single_simulation_tick()
+        assert payload_heron["cumulative_savings"] > 0.0
+
+        # 3. Ion trap with L1 coupler detuning must not trigger false-positive AE anomaly
+        sim.qpu_type = "trapped_ion_paul_trap"
+        sim.active_scenario = "crosstalk"
+        sim.defense_l1 = True
+        sim.rebuild_qpu()
+        payload_ion = run_single_simulation_tick()
+        assert payload_ion["anomaly_flagged_l4"] is False

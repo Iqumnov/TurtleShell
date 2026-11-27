@@ -1,8 +1,9 @@
 import asyncio
 import math
+import os
 import threading
 from contextlib import asynccontextmanager
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, Literal
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,16 +49,20 @@ L1_OVERHEAD_FRAC = 0.05          # Level 1 spectral partitioning & LMS filter Op
 L2_OVERHEAD_FRAC = 0.03          # Level 2 compiler SHA-256 / Isolation Forest audit overhead (3%)
 L4_OVERHEAD_FRAC = 0.04          # Level 4 differential telemetry SPC monitor overhead (4%)
 
+_allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "https://turtleshell.iqumnov.com",
+]
+if os.environ.get("TURTLESHELL_CORS_ORIGIN"):
+    _allowed_origins.append(os.environ["TURTLESHELL_CORS_ORIGIN"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:8000",
-        "https://turtleshell.iqumnov.com",
-        "*",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -133,6 +138,7 @@ class SimulationState:
         self.cumulative_costs = 0.0
         self.cumulative_wasted_cash = 0.0
         self.time_step = 0
+        self.prev_l4_anomaly = False
         self.update_allocations()
 
     def update_allocations(self):
@@ -166,12 +172,12 @@ sim = SimulationState()
 # ─── Config Model ─────────────────────────────────────────────────────────────
 
 class ConfigUpdate(BaseModel):
-    qpu_type: Optional[str] = None
-    ion_species: Optional[str] = None
-    n_ions: Optional[int] = Field(default=None, ge=2, le=200)
+    qpu_type: Optional[Literal["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]] = None
+    ion_species: Optional[Literal["Ca40", "Sr88", "Ba138", "Yb171"]] = None
+    n_ions: Optional[int] = Field(default=None, ge=10, le=50)
     tenant_count: Optional[int] = Field(default=None, ge=1, le=16)
-    scheduling_algo: Optional[str] = None
-    active_scenario: Optional[str] = None
+    scheduling_algo: Optional[Literal["random", "static", "spectral", "tdm"]] = None
+    active_scenario: Optional[Literal["crosstalk", "rowhammer", "prime_probe", "rf_leakage", "environment"]] = None
     crosstalk_intensity: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     gate_frequency_hz: Optional[float] = Field(default=None, ge=1e3, le=1e9)
     rowhammer_iterations: Optional[int] = Field(default=None, ge=0, le=100000)
@@ -271,11 +277,19 @@ def verify_qutip_lindblad():
     """Returns QuTiP Lindblad master equation solver results tied to active QPU physics."""
     with sim_lock:
         j_khz = float(np.mean([abs(c.zz_base) for c in sim.qpu.couplers])) if sim.qpu.couplers else 4.8
-        n0 = max(10.0, min(100.0, float(sim.qpu.phonon_number) * 100.0))
+        t1_avg = float(np.mean([q.t1 for q in sim.qpu.qubits.values()])) if sim.qpu.qubits else 147.13
+        t2_avg = float(np.mean([q.t2 for q in sim.qpu.qubits.values()])) if sim.qpu.qubits else 96.72
+        n_th = max(0.0, float(sim.qpu.phonon_number))
+        n0 = max(5.0, min(60.0, float(sim.qpu.phonon_number) * 100.0))
         heating = sim.qpu.heating_rate if sim.qpu.heating_rate > 0 else 1.0
         cooling = sim.qpu.cooling_rate if sim.qpu.cooling_rate > 0 else 10.0
     verifier = QuTiPVerifier()
-    zz_res = verifier.simulate_zz_crosstalk_evolution(j_zz_khz=max(0.05, j_khz))
+    zz_res = verifier.simulate_zz_crosstalk_evolution(
+        t1_us=max(1.0, t1_avg),
+        t2_us=max(1.0, t2_avg),
+        j_zz_khz=max(0.05, j_khz),
+        n_thermal=min(2.0, n_th),
+    )
     c3_res = verifier.verify_contour3_cooling(n0=n0, eta=cooling, n_dot=heating)
     return {
         "zz_crosstalk": zz_res,
@@ -305,6 +319,7 @@ def get_simulation_state():
             "defense_l4": sim.defense_l4,
             "hourly_cost": sim.hourly_cost,
             "utilization": sim.utilization,
+            "playback_speed": sim.playback_speed,
             "qpu": sim.qpu.to_dict()
         }
 
@@ -314,6 +329,8 @@ def sanitize_payload(obj: Any) -> Any:
         return {k: sanitize_payload(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [sanitize_payload(x) for x in obj]
+    elif isinstance(obj, (np.bool_, bool)):
+        return bool(obj)
     elif isinstance(obj, (np.integer, int)):
         return int(obj)
     elif isinstance(obj, (np.floating, float)):
@@ -395,12 +412,6 @@ def run_single_simulation_tick() -> Dict[str, Any]:
     cooling_tau_s = 0.0
     if sim.defense_l3 and not is_sr_lattice:
         if is_ion_trap and sim.qpu.cooling_rate > 0:
-            cooling_tau_s = sim.buffer.compute_ion_cooling_time(
-                n_bar_0=sim.qpu.phonon_number,
-                heating_rate=sim.qpu.heating_rate,
-                cooling_rate=sim.qpu.cooling_rate,
-                n_star=sim.buffer.n_star
-            )
             sim.qpu.simulate_phonon_heating(dt_s=0.1, active_cooling=True)
         sim.buffer.adjust_policy(
             anomaly_detected=l2_flagged,
@@ -409,6 +420,7 @@ def run_single_simulation_tick() -> Dict[str, Any]:
             cooling_rate=sim.qpu.cooling_rate,
             is_ion_trap=is_ion_trap
         )
+        cooling_tau_s = sim.buffer.current_tau_s
     else:
         sim.buffer.current_delay_us = 0.0
         sim.buffer.overhead_pct = 0.0
@@ -438,13 +450,14 @@ def run_single_simulation_tick() -> Dict[str, Any]:
         sim.prev_l4_anomaly = ae_anomaly
         print(f"[Contour 4 Autoencoder] State Transition -> Anomaly: {ae_anomaly} (MSE Loss: {ae_loss:.4f}, Threshold: {sim.monitor._ae.spc_threshold:.4f})")
     
+    bbr_shift_hz = (sim.env_temperature_mk - 15.0) * 1.2 if is_sr_lattice else 0.0
+    zeeman_delta_hz = sim.qpu.clock_freq_hz * 1e-7 if sim.qpu.clock_freq_hz > 0 else 0.0
     monitor_result = sim.monitor.update(
         # SPC input: mean of top-3 coherence metrics (avg_t1, avg_t2, std_t1).
         # ADC noise already applied via noise_vec above — no additional jitter here.
-        # Adding separate np.random noise inflated window σ and suppressed Z-scores.
         telemetry_value=float(np.mean(telemetry[:3])),
-        nu_plus=sim.qpu.clock_freq_hz * 1.0000001 if sim.qpu.clock_freq_hz > 0 else 0.0,
-        nu_minus=sim.qpu.clock_freq_hz * 0.9999999 if sim.qpu.clock_freq_hz > 0 else 0.0
+        nu_plus=(sim.qpu.clock_freq_hz + zeeman_delta_hz + bbr_shift_hz) if sim.qpu.clock_freq_hz > 0 else 0.0,
+        nu_minus=(sim.qpu.clock_freq_hz - zeeman_delta_hz + bbr_shift_hz) if sim.qpu.clock_freq_hz > 0 else 0.0
     )
     z_score = monitor_result["z_score"]
     threat_level = monitor_result["threat_level"]
@@ -485,6 +498,19 @@ def run_single_simulation_tick() -> Dict[str, Any]:
     isolation_index = sim.qpu.compute_isolation_index(sim.allocations, sim.defense_l1)
 
     raw_loss = max(0.0, base_benchmark_fidelity - raw_fidelity)
+    # Track fidelity loss already prevented upstream by Contour 1 spectral routing/detuning
+    l1_prevented_loss = 0.0
+    if sim.defense_l1 and sim.active_scenario == "crosstalk" and sim.crosstalk_intensity > 0:
+        t0_len = len(sim.allocations.get(0, []))
+        t1_len = len(sim.allocations.get(1, []))
+        if t0_len > 0 and t1_len > 0 and sim.qpu.couplers:
+            mean_zz_khz = float(np.mean([abs(c.zz_base) for c in sim.qpu.couplers]))
+            freq_factor = max(0.5, min(3.0, sim.gate_frequency_hz / 1e6))
+            dur_s = 100.0e-6 * (sim.crosstalk_intensity / 100.0) * freq_factor
+            unmitigated_phi = min(math.pi, 2.0 * math.pi * mean_zz_khz * 1e3 * dur_s)
+            unmitigated_drop = min(0.35, 0.36 * (1.0 - math.exp(-0.25 * (unmitigated_phi ** 2))))
+            l1_prevented_loss = max(0.0, unmitigated_drop - raw_loss)
+
     recovery = 0.0
 
     if sim.defense_l1:
@@ -535,8 +561,8 @@ def run_single_simulation_tick() -> Dict[str, Any]:
         else 0.0
     )
 
-    total_risk_loss = raw_loss + rf_risk_frac
-    total_recovered = min(total_risk_loss, recovery + rf_mitigated_frac)
+    total_risk_loss = raw_loss + l1_prevented_loss + rf_risk_frac
+    total_recovered = min(total_risk_loss, l1_prevented_loss + recovery + rf_mitigated_frac)
 
     if has_active_defenses and total_risk_loss > 0:
         avoided_step_loss = total_recovered * base_run_cost * RERUN_COST_MULTIPLIER
@@ -559,6 +585,9 @@ def run_single_simulation_tick() -> Dict[str, Any]:
     sim.cumulative_costs += defense_overhead
     sim.cumulative_savings += avoided_step_loss
     sim.cumulative_wasted_cash += loss_with_defense
+
+    qpu_dict = sim.qpu.to_dict()
+    qpu_dict["rf_leakage_db"] = round(effective_leakage_db, 1)
 
     payload = {
         "time_step": sim.time_step,
@@ -587,7 +616,7 @@ def run_single_simulation_tick() -> Dict[str, Any]:
         "cumulative_costs": round(sim.cumulative_costs, 2),
         "cumulative_wasted_cash": round(sim.cumulative_wasted_cash, 2),
         "net_benefit": round(sim.cumulative_savings - sim.cumulative_costs, 2),
-        "qpu": sim.qpu.to_dict(),
+        "qpu": qpu_dict,
         "active_scenario_metrics": {
             "crosstalk_hops": ct_results.get("min_distance_hops", -1),
             "crosstalk_phase_error": ct_results.get("phase_error_rad", 0.0),
@@ -614,7 +643,7 @@ async def global_simulation_loop():
             if connected_clients:
                 sanitized = sanitize_payload(payload)
                 dead_clients = set()
-                for client in connected_clients:
+                for client in list(connected_clients):
                     try:
                         await client.send_json(sanitized)
                     except Exception:

@@ -71,7 +71,7 @@ class GoogleProvider(QuantumProvider):
         crosstalk = {}
         for edge in edges:
             gate_errors[f"cz_{edge[0]}_{edge[1]}"] = max(0.005, float(rng.normal(0.006, 0.001)))
-            # ZZ crosstalk in Sycamore is around 2.0 kHz due to tunable couplers active cancellation
+            # ZZ crosstalk in Sycamore is around 1.2 kHz due to tunable couplers active cancellation
             crosstalk[f"{edge[0]}_{edge[1]}"] = max(0.1, float(rng.normal(1.2, 0.2)))
             
         return {
@@ -112,14 +112,14 @@ class GoogleProvider(QuantumProvider):
         for idx, (circ, qubits) in enumerate(circuits_with_qubits):
             key = f"tenant_{idx}"
             measure_keys.append(key)
-            q_map = {q: cirq.GridQubit(0, qubits[i]) for i, q in enumerate(sorted(circ.all_qubits())) if i < len(qubits)}
+            q_map = {q: cirq.GridQubit(qubits[i] // 6, qubits[i] % 6) for i, q in enumerate(sorted(circ.all_qubits())) if i < len(qubits)}
             mapped = circ.transform_qubits(lambda q, m=q_map: m.get(q, q))
             # Re-tag terminal measurements or append tagged measurement on mapped qubits
             for moment in mapped:
                 ops = [op for op in moment.operations if not isinstance(op.gate, cirq.MeasurementGate)]
                 if ops:
                     merged_circuit.append(cirq.Moment(ops))
-            target_qs = [cirq.GridQubit(0, q) for q in qubits]
+            target_qs = [cirq.GridQubit(q // 6, q % 6) for q in qubits]
             if target_qs:
                 merged_circuit.append(cirq.measure(*target_qs, key=key))
 

@@ -9,6 +9,7 @@ Used for:
   2. Contour 3 Laser Cooling Buffer dynamics on harmonic phonon/bosonic modes (Paper #2 Eq. 5).
 """
 
+import math
 import numpy as np
 from typing import Dict, Any
 
@@ -110,13 +111,15 @@ class QuTiPVerifier:
                 "status": "Exact Liouvillian mode (QuTiP library absent)"
             }
 
-        # 2-Qubit System Operators
+        # 2-Qubit System Operators (qt.destroy(2) maps |1⟩→|0⟩, matching sm in exact Liouvillian fallback)
+        a2 = qt.destroy(2)
+        a2_dag = qt.create(2)
         q0_z = qt.tensor(qt.sigmaz(), qt.qeye(2))
         q1_z = qt.tensor(qt.qeye(2), qt.sigmaz())
-        q0_m = qt.tensor(qt.sigmam(), qt.qeye(2))
-        q0_p = qt.tensor(qt.sigmap(), qt.qeye(2))
-        q1_m = qt.tensor(qt.qeye(2), qt.sigmam())
-        q1_p = qt.tensor(qt.qeye(2), qt.sigmap())
+        q0_m = qt.tensor(a2, qt.qeye(2))
+        q0_p = qt.tensor(a2_dag, qt.qeye(2))
+        q1_m = qt.tensor(qt.qeye(2), a2)
+        q1_p = qt.tensor(qt.qeye(2), a2_dag)
 
         # Rotating Frame Hamiltonian H = J_zz * (σ_z0 ⊗ σ_z1)
         H_rot = j_zz_rad_us * (q0_z * q1_z)
@@ -168,9 +171,21 @@ class QuTiPVerifier:
         Analytical closed form:
             n̄(τ) = n̄_∞ + (n̄_0 - n̄_∞) e^(-η τ),  where n̄_∞ = ṅ / η
         """
-        times = np.linspace(0, tau_s, 100)
-        n_inf = n_dot / max(1e-5, eta)
-        analytic_n_bar = n_inf + (n0 - n_inf) * np.exp(-eta * times)
+        tau_val = max(0.0, float(tau_s))
+        times = np.linspace(0.0, tau_val, 100)
+        n0_clamped = max(0.0, float(n0))
+        eta_val = max(0.0, float(eta))
+        n_dot_val = max(0.0, float(n_dot))
+
+        if eta_val <= 1e-12:
+            # Pure heating regime (eta == 0): d<n>/dt = n_dot => n_bar(t) = n0 + n_dot * t
+            n_inf = float("inf")
+            analytic_n_bar = n0_clamped + n_dot_val * times
+            max_expected = float(analytic_n_bar[-1]) if len(analytic_n_bar) else n0_clamped
+        else:
+            n_inf = n_dot_val / eta_val
+            analytic_n_bar = n_inf + (n0_clamped - n_inf) * np.exp(-eta_val * times)
+            max_expected = max(n0_clamped, float(n_inf))
 
         if not HAS_QUTIP:
             return {
@@ -188,15 +203,15 @@ class QuTiPVerifier:
         # convex mixture (1 - f)|k><k| + f|k+1><k+1| with exact mean Tr(rho0 N) = n0,
         # avoiding Bose-Einstein truncation bias and O(n0^2) Liouvillian blow-up while
         # preserving identical first-moment Lindblad trajectory d<n>/dt = n_dot - eta <n>.
-        n0_clamped = max(0.0, float(n0))
-        if n0_clamped <= 3.0 and n_inf <= 3.0:
+        if n0_clamped <= 3.0 and (eta_val > 1e-12 and n_inf <= 3.0):
             n_eff = max(int(N), 80)
             rho0 = qt.fock_dm(n_eff, 0) if n0_clamped == 0.0 else qt.thermal_dm(n_eff, n0_clamped)
         else:
-            k = int(n0_clamped)
-            frac = n0_clamped - k
-            n_eff = max(int(N), int(k + 30 + 6.0 * n_inf))
-            rho0 = (1.0 - frac) * qt.fock_dm(n_eff, k) + frac * qt.fock_dm(n_eff, k + 1)
+            k = min(350, int(n0_clamped))
+            frac = max(0.0, min(1.0, n0_clamped - int(n0_clamped)))
+            peak_n = min(350, int(math.ceil(max_expected)))
+            n_eff = max(int(N), peak_n + 40)
+            rho0 = (1.0 - frac) * qt.fock_dm(n_eff, k) + frac * qt.fock_dm(n_eff, min(n_eff - 1, k + 1))
 
         # Bosonic annihilation operator
         a = qt.destroy(n_eff)
@@ -204,10 +219,11 @@ class QuTiPVerifier:
 
         # Collapse operators matching d(n_bar)/dt = n_dot - eta * n_bar:
         # L_cool = √(η + ṅ) * a, L_heat = √ṅ * a^† (standard thermal+cooling Lindblad generator)
-        c_ops = [
-            np.sqrt(eta + n_dot) * a,
-            np.sqrt(n_dot) * a.dag()
-        ]
+        c_ops = []
+        if eta_val + n_dot_val > 0.0:
+            c_ops.append(np.sqrt(eta_val + n_dot_val) * a)
+        if n_dot_val > 0.0:
+            c_ops.append(np.sqrt(n_dot_val) * a.dag())
 
         # Expectation operator: N_op = a^† a
         num_op = a.dag() * a

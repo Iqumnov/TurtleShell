@@ -78,14 +78,22 @@ Set-Content -Path $QibBat -Value $BatContent -Force
 
 Write-Host "[+] Created qib CLI wrapper at $QibBat" -ForegroundColor Green
 
-# 4. Install local web app dependencies if npm exists
+# 4. Install local web app dependencies (prefer pnpm, fallback to npm)
+$PnpmCmd = Get-Command pnpm -ErrorAction SilentlyContinue
 $NpmCmd = Get-Command npm -ErrorAction SilentlyContinue
 $FrontendDir = Join-Path $ScriptDir "packages\turtleshell-live\frontend"
-if ($NpmCmd -and (Test-Path $FrontendDir)) {
-    Write-Host "[+] Installing local web app dependencies..." -ForegroundColor Green
-    Push-Location $FrontendDir
-    & $NpmCmd.Source install
-    Pop-Location
+if (Test-Path $FrontendDir) {
+    if ($PnpmCmd) {
+        Write-Host "[+] Installing local web app dependencies with pnpm..." -ForegroundColor Green
+        Push-Location $ScriptDir
+        & $PnpmCmd.Source install --frozen-lockfile
+        Pop-Location
+    } elseif ($NpmCmd) {
+        Write-Host "[+] Installing local web app dependencies with npm..." -ForegroundColor Green
+        Push-Location $FrontendDir
+        & $NpmCmd.Source install
+        Pop-Location
+    }
 }
 
 # 4. PATH Notification

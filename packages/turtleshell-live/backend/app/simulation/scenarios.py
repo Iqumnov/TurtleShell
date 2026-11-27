@@ -218,7 +218,7 @@ class SimulationScenarios:
                 total_degrad += degrad
                 count += 1
         
-        avg_degrad = (total_degrad / count) * 100 if count > 0 else 0.0
+        avg_degrad = (total_degrad / len(t0_qubits)) * 100 if t0_qubits else 0.0
         # Error rate increase proportional to avg degradation
         error_rate_increase = round(avg_degrad * 0.3, 3)
         
@@ -245,18 +245,19 @@ class SimulationScenarios:
         2. Delay interval: t_delay
         3. Probe phase: victim runs, fidelity degraded by residual excitation
         """
+        t = qpu.layout_type
+        delay_val = max(0.0, float(delay_us))
+        base_default = 0.995 if "trapped_ion" in t else (0.999 if "sr_optical" in t else 0.94)
         t0_qubits = tenant_allocations.get(0, [])
         if not t0_qubits:
-            return {"probe_fidelity": 0.90, "residual_excitation": 0.0, "phonon_n_bar": 0.0}
-        
-        t = qpu.layout_type
-        
+            return {"probe_fidelity": base_default, "residual_excitation": 0.0, "phonon_n_bar": round(qpu.phonon_number, 4)}
+
         if "trapped_ion" in t:
             # Ion trap model: transient motional excitation thermalization over µs probe window
             # After priming, n̄ is elevated and relaxes over optical/sideband thermalization τ ≈ 300 µs
             n_bar_prime = 2.0 + qpu.heating_rate * 0.1
             tau_decay_us = 300.0
-            n_bar_residual = n_bar_prime * math.exp(-max(0.0, delay_us) / tau_decay_us)
+            n_bar_residual = n_bar_prime * math.exp(-delay_val / tau_decay_us)
             
             # Fidelity drop from residual phonons:
             # F ≈ F0 / (1 + 0.3 * n̄_residual) for Lamb-Dicke regime
@@ -275,9 +276,9 @@ class SimulationScenarios:
         elif "sr_optical" in t:
             # Optical lattice (87Sr): residual excitation is rapidly cleared by optical pumping / state reset (~1 ms)
             avg_t1 = float(np.mean([qpu.qubits[q].t1 for q in t0_qubits]))
-            base_fidelity = 0.94
+            base_fidelity = 0.999
             initial_excitation = 0.05
-            residual_excitation = initial_excitation * math.exp(-delay_us / 1000.0)
+            residual_excitation = initial_excitation * math.exp(-delay_val / 1000.0)
             probe_fidelity = max(0.1, base_fidelity - residual_excitation * 0.05)
             
             return {
@@ -289,9 +290,9 @@ class SimulationScenarios:
         else:
             # Superconducting model: T1 decay
             avg_t1 = float(np.mean([qpu.qubits[q].t1 for q in t0_qubits]))
-            base_fidelity = 0.90
+            base_fidelity = 0.94
             initial_excitation = 0.6
-            residual_excitation = initial_excitation * math.exp(-delay_us / avg_t1)
+            residual_excitation = initial_excitation * math.exp(-delay_val / max(0.01, avg_t1))
             probe_fidelity = max(0.1, base_fidelity - residual_excitation)
             
             return {

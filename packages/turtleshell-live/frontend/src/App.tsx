@@ -14,15 +14,20 @@ import { AcademicPanel } from './components/AcademicPanel';
 import { PlatformBackground } from './components/PlatformBackground';
 
 export const App: React.FC = () => {
-  const store = useSimStore();
-  const theme = store.theme;
-  const lang = store.language;
-  const connectWS = store.connectWS;
-  const disconnectWS = store.disconnectWS;
+  const theme = useSimStore((s) => s.theme);
+  const lang = useSimStore((s) => s.language);
+  const connectWS = useSimStore((s) => s.connectWS);
+  const disconnectWS = useSimStore((s) => s.disconnectWS);
+  const toggleTheme = useSimStore((s) => s.toggleTheme);
+  const setLanguage = useSimStore((s) => s.setLanguage);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = lang === 'RU' ? 'ru' : 'en';
+  }, [lang]);
 
   useEffect(() => {
     const prefersReducedMotion = Boolean(
@@ -81,9 +86,9 @@ export const App: React.FC = () => {
 
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
-              onClick={() => store.toggleTheme()}
+              onClick={toggleTheme}
               className="hud-button text-xs p-1 bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--text-main)]"
-              title="Toggle Theme"
+              title={lang === 'RU' ? 'Переключить тему' : 'Toggle Theme'}
             >
               {theme === 'dark' ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -104,9 +109,9 @@ export const App: React.FC = () => {
               )}
             </button>
             <button
-              onClick={() => store.setLanguage(lang === 'EN' ? 'RU' : 'EN')}
+              onClick={() => setLanguage(lang === 'EN' ? 'RU' : 'EN')}
               className="hud-button text-xs px-1.5 py-0.5 font-bold bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--text-main)]"
-              title="Switch Language"
+              title={lang === 'RU' ? 'Сменить язык' : 'Switch Language'}
             >
               {lang}
             </button>

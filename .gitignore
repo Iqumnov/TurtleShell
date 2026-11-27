@@ -28,7 +28,7 @@ venv/
 ENV/
 env/
 
-# Testing & Coverage
+# Testing, QuTiP & Coverage
 .pytest_cache/
 .coverage
 .coverage.*
@@ -39,6 +39,13 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
+qutip_coeffs_*/
+results/
+benchmarks/
+report.*
+bench_*.json
+bench_*.md
+bench_*.html
 
 # Node & Package Managers
 node_modules/
@@ -46,10 +53,11 @@ node_modules/
 package-lock.json.bak
 pnpm-lock.yaml.bak
 
-# Web / Frontend Build
+# Web / Frontend Build & Cloudflare
 dist/
 .output/
 .vinxi/
+.wrangler/
 *.tsbuildinfo
 
 # Environment & Secrets
@@ -59,11 +67,6 @@ dist/
 *.pem
 *.key
 .lake/
-
-# Rust / Cargo
-target/
-**/*.rs.bk
-Cargo.lock.bak
 
 # IDEs & System
 .gemini/

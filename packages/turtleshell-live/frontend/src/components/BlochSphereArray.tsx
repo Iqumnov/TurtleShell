@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSimStore, QubitState } from '../store/useSimStore';
 import { translations } from '../locales/translations';
-import { getTenantColor } from './Chip3DViewer';
+import { getTenantColor } from '../utils/tenantColors';
 
 /**
  * Format coherence time (in µs) to the most readable SI unit.
@@ -37,17 +37,17 @@ export const BlochSphereArray: React.FC = () => {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || scrubIndex !== null) return;
     const interval = setInterval(() => {
       setTick((t) => t + 1);
     }, 100);
     return () => clearInterval(interval);
-  }, [connected]);
+  }, [connected, scrubIndex]);
 
   if (!metrics || !metrics.qpu) {
     return (
       <div className="w-full text-center text-[var(--text-muted)] font-mono text-xs p-6">
-        AWAITING QUBIT SPIN STATE DATA...
+        {lang === 'RU' ? 'ОЖИДАНИЕ ДАННЫХ СПИНОВОГО СОСТОЯНИЯ КУБИТОВ...' : 'AWAITING QUBIT SPIN STATE DATA...'}
       </div>
     );
   }
@@ -140,7 +140,7 @@ export const BlochSphereArray: React.FC = () => {
   const cleanThreatLabel = threatLabel.replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, '');
 
   return (
-    <div className="w-full h-[520px] hud-panel p-4 flex flex-row gap-5 font-mono text-xs select-text">
+    <div className="w-full min-h-[520px] hud-panel p-4 flex flex-col sm:flex-row gap-5 font-mono text-xs select-text">
       
       {/* Left Column: Enlarged Bloch Spheres Grid (160x160) */}
       <div className="flex-1 grid grid-cols-2 gap-4 items-center justify-items-center">
@@ -166,7 +166,7 @@ export const BlochSphereArray: React.FC = () => {
           return (
             <div key={`${q.id}-${idx}`} className="flex flex-col items-center gap-1.5">
               {/* SVG Canvas - Enlarged to 160x160 */}
-              <svg width="160" height="160" viewBox="0 0 160 160" className="overflow-visible">
+              <svg width="160" height="160" viewBox="0 0 160 160" className="overflow-visible w-full max-w-[160px] h-auto">
                 <circle cx={x0} cy={y0} r={R} fill="none" stroke="var(--border-bright)" strokeWidth="1.2" />
                 <ellipse cx={x0} cy={y0} rx={R} ry={R * 0.3} fill="none" stroke="var(--border-color)" strokeWidth="1" strokeDasharray="3,3" />
                 <ellipse cx={x0} cy={y0} rx={R * 0.3} ry={R} fill="none" stroke="var(--border-color)" strokeWidth="1" strokeDasharray="3,3" />
@@ -204,7 +204,7 @@ export const BlochSphereArray: React.FC = () => {
       </div>
 
       {/* Right Column: Real-time Telemetry Metrics Column */}
-      <div className="w-52 flex flex-col gap-3 border-l border-[var(--border-color)] pl-4 justify-center">
+      <div className="w-full sm:w-52 flex flex-col gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border-color)] pt-3 sm:pt-0 sm:pl-4 justify-center">
         <div className="p-2.5 hud-inset flex flex-col gap-1">
           <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.fidelity}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">

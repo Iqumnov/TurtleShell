@@ -14,11 +14,11 @@ def generate_grover_circuit(qubits: List[int]) -> Any:
         raise ValueError("generate_grover_circuit requires at least 3 qubits")
     if not QISKIT_AVAILABLE:
         return None
-    # 3-qubit Grover search for state |111>
-    qc = QuantumCircuit(max(qubits) + 1, len(qubits))
-    
-    # Map input indices to targets
-    q0, q1, q2 = qubits[0], qubits[1], qubits[2]
+    # 3-qubit Grover search for state |111> in compact register compatible with _pack_parallel_circuits
+    qc = QuantumCircuit(len(qubits), len(qubits))
+
+    # Map local logical indices [0, 1, 2] so packed placement targets qubits[0..3]
+    q0, q1, q2 = 0, 1, 2
     
     # Initialize superposition
     qc.h(q0)
@@ -44,8 +44,8 @@ def generate_grover_circuit(qubits: List[int]) -> Any:
     qc.h(q2)
     
     # Measure
-    for i, q in enumerate(qubits):
-        qc.measure(q, i)
+    for i in range(len(qubits)):
+        qc.measure(i, i)
         
     return qc
 
@@ -83,8 +83,8 @@ def run_crosstalk_audit(
                 pass
                 
     # Calculate fidelity analytically or via simulator execution
-    # Base isolated fidelity (starts high, e.g. 0.92)
-    isolated_fidelity = 0.92 - 0.005 * len(ref_qubits)
+    # Base isolated fidelity (clamped cleanly for large multi-qubit registers)
+    isolated_fidelity = max(0.5, 0.92 - 0.005 * len(ref_qubits))
     
     # ZZ crosstalk effect calculation:
     # Stronger crosstalk if close, weaker if far (decay is exponential with distance)

@@ -49,9 +49,9 @@ class MultiTenantScheduler:
             for idx, (tid, _) in enumerate(ranked):
                 adjusted_demands[tid] = 1 if idx < total_q else 0
         elif total_demand <= total_q:
-            # Demands fit — use as-is
+            # Demands fit — preserve zero demands for idle/queued tenants (e.g. TDM)
             for tid, demand in tenant_demands.items():
-                adjusted_demands[tid] = max(1, demand)
+                adjusted_demands[tid] = max(0, demand)
         else:
             # Scale down proportionally, ensuring each tenant gets at least 1
             reserved = n_tenants  # 1 qubit minimum per tenant

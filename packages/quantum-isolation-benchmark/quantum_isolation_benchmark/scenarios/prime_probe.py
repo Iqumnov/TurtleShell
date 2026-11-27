@@ -19,7 +19,8 @@ def run_prime_probe_audit(
     calibration = provider.get_calibration(backend)
     
     # Calculate average T1 for the selected qubits
-    avg_t1 = np.mean([calibration["T1"][q] for q in qubits])
+    avg_t1 = float(np.mean([calibration["T1"][q] for q in qubits])) if qubits else 100.0
+    delay_val = max(0.0, float(delay_us))
     
     # Base isolated fidelity
     base_fidelity = 0.90
@@ -37,10 +38,10 @@ def run_prime_probe_audit(
     )
     if has_active_reset:
         # Trapped ions / neutral atoms use active optical pumping or reloading, yielding ~50x lower residual excitation
-        residual_error = 0.02 * initial_residual * np.exp(-delay_us / max(1.0, float(avg_t1)))
+        residual_error = 0.02 * initial_residual * np.exp(-delay_val / max(1.0, float(avg_t1)))
     else:
         # Superconducting chips have significant thermal relaxation delay
-        residual_error = initial_residual * np.exp(-delay_us / max(1.0, float(avg_t1)))
+        residual_error = initial_residual * np.exp(-delay_val / max(1.0, float(avg_t1)))
         
     final_fidelity = max(0.1, base_fidelity - residual_error)
     

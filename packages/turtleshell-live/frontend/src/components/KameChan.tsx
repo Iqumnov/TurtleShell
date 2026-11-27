@@ -111,8 +111,8 @@ export const KameChan: React.FC = () => {
     // Scenario 5: Environment Decoherence
     if (activeScenario === 'environment') {
       const t1Display = metrics.average_t1 > 1e6
-        ? `${(metrics.average_t1 / 1e6).toFixed(2)}s`
-        : `${metrics.average_t1.toFixed(0)}µs`;
+        ? `${(metrics.average_t1 / 1e6).toFixed(2)}${lang === 'RU' ? 'с' : 's'}`
+        : `${metrics.average_t1.toFixed(0)}${lang === 'RU' ? 'мкс' : 'µs'}`;
       if (metrics.fidelity < 0.8) {
         return t.dialogueDecoherenceCritical((metrics.fidelity * 100).toFixed(1), t1Display);
       }
@@ -148,8 +148,8 @@ export const KameChan: React.FC = () => {
     // Phonon Heating Alert for Ion Traps
     if (isIonTrap && (metrics.phonon_number ?? 0) > 2.0) {
       const t1Display = metrics.average_t1 > 1e6
-        ? `${(metrics.average_t1 / 1e6).toFixed(2)}s`
-        : `${metrics.average_t1.toFixed(0)}µs`;
+        ? `${(metrics.average_t1 / 1e6).toFixed(2)}${lang === 'RU' ? 'с' : 's'}`
+        : `${metrics.average_t1.toFixed(0)}${lang === 'RU' ? 'мкс' : 'µs'}`;
       return t.dialogueDecoherenceCritical(
         (metrics.fidelity * 100).toFixed(1),
         t1Display

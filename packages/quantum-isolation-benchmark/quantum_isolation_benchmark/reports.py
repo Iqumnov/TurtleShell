@@ -124,9 +124,9 @@ def compile_academic_report(results: List[Dict[str, Any]], format_type: str = "m
         "demanding spatial guard bands (at least 3 hops) or active coupler de-tuning. In contrast, "
         "trapped-ion architectures (Azure/IonQ profiles) showcase low static lattice crosstalk, though they require "
         "strict temporal separation policies and RF shielding to mitigate slow decay and side-channel emission leakage. "
-        "We conclude that the multi-contour TurtleShell stack—combining Contour 1 (Spectral Partitioning), "
-        "Contour 2 (NLMS Active Cancellation), Contour 3 (Laser Cooling / Calibration Buffers), and Contour 4 "
-        "(Differential Zeeman & Drift Detection)—is essential to establish verifiable isolation boundaries."
+        "We conclude that the multi-contour TurtleShell stack—combining Contour 1 (Spectral Partitioning & NLMS Active Cancellation), "
+        "Contour 2 (Compiler SHA-256 & Isolation Forest Verification), Contour 3 (Laser Cooling / Calibration Buffers), and Contour 4 "
+        "(Autoencoder & Differential Zeeman SPC Monitoring)—is essential to establish verifiable isolation boundaries."
     )
     
     references = (

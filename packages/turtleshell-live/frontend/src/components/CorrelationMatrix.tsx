@@ -145,58 +145,60 @@ export const CorrelationMatrix: React.FC = () => {
         <span>{lang === 'RU' ? "[ КОРРЕЛЯЦИЯ ПИРСОНА R ]" : "[ PEARSON R ]"}</span>
       </div>
 
-      <div className="p-3 grid grid-cols-12 gap-3 items-center flex-1 min-h-0">
-        {/* Matrix Grid (9 Cols) */}
-        <div className="col-span-9 flex flex-col items-center justify-center h-full">
-          <div className="flex flex-row mb-1.5">
-            <div className="w-24 text-center font-bold text-[var(--text-muted)] text-[10px]" />
-            {variables.map((v) => (
-              <div key={v.key} className="w-24 text-center font-bold text-[var(--text-main)] text-[10px] uppercase truncate px-1" title={v.label}>
-                {v.label}
+      <div className="p-3 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch flex-1 min-h-0">
+        {/* Matrix Grid (8 Cols on xl, full width below xl) */}
+        <div className="xl:col-span-8 flex flex-col justify-center min-w-0 overflow-x-auto">
+          <div className="w-full min-w-[260px]">
+            <div className="grid grid-cols-[minmax(44px,1.1fr)_repeat(5,minmax(0,1fr))] gap-1 mb-1 items-center">
+              <div className="text-center font-bold text-[var(--text-muted)] text-[10px]" />
+              {variables.map((v) => (
+                <div key={v.key} className="text-center font-bold text-[var(--text-main)] text-[10px] uppercase truncate px-0.5" title={v.label}>
+                  {v.label}
+                </div>
+              ))}
+            </div>
+
+            {variables.map((vRow) => (
+              <div key={vRow.key} className="grid grid-cols-[minmax(44px,1.1fr)_repeat(5,minmax(0,1fr))] gap-1 items-center mb-1">
+                <div className="text-right pr-1 font-bold text-[var(--text-main)] text-[10px] uppercase truncate" title={vRow.label}>
+                  {vRow.label}
+                </div>
+                {variables.map((vCol) => {
+                  const cell = getDynamicPearsonCell(vRow.key, vCol.key);
+                  const isWhiteBg = cell.val === 1.0;
+                  const isHovered = hoveredCell?.x === vRow.key && hoveredCell?.y === vCol.key;
+                  return (
+                    <div
+                      key={vCol.key}
+                      onMouseEnter={() =>
+                        setHoveredCell({
+                          x: vRow.key,
+                          y: vCol.key,
+                          val: cell.val,
+                          desc: cell.desc,
+                        })
+                      }
+                      onMouseLeave={() => setHoveredCell(null)}
+                      style={{ backgroundColor: getCellColor(cell.val) }}
+                      className={`h-9 border border-[var(--border-color)] flex items-center justify-center cursor-pointer transition-all duration-150 relative min-w-0 px-0.5 ${
+                        isHovered ? 'z-20 border-2 border-[var(--border-bright)] shadow-sm' : ''
+                      }`}
+                    >
+                      <span className={`font-mono text-[10px] font-bold truncate ${isWhiteBg ? 'text-[var(--bg-color)] font-extrabold' : 'text-[var(--text-main)]'} select-text`}>
+                        {cell.val === 1.0
+                          ? "1.00"
+                          : `${cell.val > 0 ? '+' : ''}${cell.val.toFixed(2)}${Math.abs(cell.val) >= 0.85 ? '**' : (Math.abs(cell.val) >= 0.65 ? '*' : '')}`}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
-
-          {variables.map((vRow) => (
-            <div key={vRow.key} className="flex flex-row items-center mb-1">
-              <div className="w-24 text-right pr-2 font-bold text-[var(--text-main)] text-[10px] uppercase truncate" title={vRow.label}>
-                {vRow.label}
-              </div>
-              {variables.map((vCol) => {
-                const cell = getDynamicPearsonCell(vRow.key, vCol.key);
-                const isWhiteBg = cell.val === 1.0;
-                const isHovered = hoveredCell?.x === vRow.key && hoveredCell?.y === vCol.key;
-                return (
-                  <div
-                    key={vCol.key}
-                    onMouseEnter={() =>
-                      setHoveredCell({
-                        x: vRow.key,
-                        y: vCol.key,
-                        val: cell.val,
-                        desc: cell.desc,
-                      })
-                    }
-                    onMouseLeave={() => setHoveredCell(null)}
-                    style={{ backgroundColor: getCellColor(cell.val) }}
-                    className={`w-24 h-10 border border-[var(--border-color)] flex items-center justify-center cursor-pointer transition-all duration-150 relative ${
-                      isHovered ? 'z-20 border-2 border-[var(--border-bright)] shadow-sm' : ''
-                    }`}
-                  >
-                    <span className={`font-mono text-xs font-bold ${isWhiteBg ? 'text-[var(--bg-color)] font-extrabold' : 'text-[var(--text-main)]'} select-text`}>
-                      {cell.val === 1.0
-                        ? "1.00"
-                        : `${cell.val > 0 ? '+' : ''}${cell.val.toFixed(2)}${Math.abs(cell.val) >= 0.85 ? '**' : (Math.abs(cell.val) >= 0.65 ? '*' : '')}`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
         </div>
 
-        {/* Dynamic Sidebar Info Box (3 Cols) */}
-        <div className="col-span-3 h-full border border-[var(--border-color)] p-3 bg-[var(--bg-color)] flex flex-col justify-between select-text">
+        {/* Dynamic Sidebar Info Box (4 Cols on xl, full width below xl) */}
+        <div className="xl:col-span-4 border border-[var(--border-color)] p-2.5 bg-[var(--bg-color)] flex flex-col justify-between select-text min-w-0">
           {hoveredCell ? (
             <div className="flex flex-col gap-2">
               <span className="text-xs font-bold text-[var(--text-main)] uppercase border-b border-[var(--border-color)] pb-1">

@@ -52,8 +52,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck & build frontend
-        run: pnpm --filter turtleshell-live-frontend build
+      - name: Lint, typecheck & build frontend
+        run: |
+          pnpm --filter turtleshell-live-frontend lint
+          pnpm --filter turtleshell-live-frontend build
 
   verify-lean:
     name: Lean 4 Formal Proofs

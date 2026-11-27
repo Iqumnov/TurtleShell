@@ -1,0 +1,17 @@
+{
+  "name": "TurtleShell Live",
+  "short_name": "TurtleShell",
+  "description": "Multi-Tenant Quantum Process Isolation & Side-Channel Defense Console",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#050505",
+  "background_color": "#050505",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+

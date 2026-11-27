@@ -34,7 +34,9 @@ class LMSFilter:
         self.suppression_db: float = 0.0
         self.converged: bool = False
         self._step_count: int = 0
+        self._sample_idx: int = 0
         self._mse_history: List[float] = []
+        self._desired_power_history: List[float] = []
         self._input_power_history: List[float] = []
         # Local RNG for AWGN noise on RF line (seed 7, never touches global stream)
         self._rng = np.random.default_rng(7)
@@ -70,17 +72,20 @@ class LMSFilter:
         self._step_count += 1
         # Append once to each history (error was double-appended previously — bug fixed)
         self._mse_history.append(error ** 2)
+        self._desired_power_history.append(desired ** 2 + 1e-12)
         self._input_power_history.append(input_signal ** 2 + 1e-12)
         if len(self._mse_history) > 100:
             self._mse_history.pop(0)
+        if len(self._desired_power_history) > 100:
+            self._desired_power_history.pop(0)
         if len(self._input_power_history) > 100:
             self._input_power_history.pop(0)
-        
+
         if len(self._mse_history) >= 10:
             recent_mse = float(np.mean(self._mse_history[-10:]))
-            input_power = float(np.mean(self._input_power_history[-10:]))
-            if input_power > 0 and recent_mse > 0:
-                self.suppression_db = max(0.0, 10.0 * math.log10(input_power / (recent_mse + 1e-12)))
+            desired_power = float(np.mean(self._desired_power_history[-10:]))
+            if desired_power > 0 and recent_mse > 0:
+                self.suppression_db = max(0.0, 10.0 * math.log10(desired_power / (recent_mse + 1e-12)))
                 self.suppression_db = min(40.0, self.suppression_db)
             else:
                 self.suppression_db = 0.0
@@ -98,11 +103,13 @@ class LMSFilter:
         Returns suppressed leakage level in dB.
         """
         omega = 2 * math.pi * 1e6  # 1 MHz RF frequency
+        dt_sample = 0.23e-6        # ~4.35 MHz sampling rate (>2x Nyquist) with non-integer period
         for k in range(120):
-            t = k * 1.35e-6  # Non-integer period sampling to prevent aliasing
+            t = (self._sample_idx + k) * dt_sample
             ref_drive = math.sin(omega * t) + 0.02 * float(self._rng.standard_normal())
             leaked_desired = 0.85 * math.sin(omega * t - 0.35) + 0.03 * float(self._rng.standard_normal())
             self.update(leaked_desired, ref_drive)
+        self._sample_idx += 120
         
         # Suppression achieved
         return base_leakage_db - self.suppression_db
@@ -202,6 +209,8 @@ class LaserCoolingBuffer:
             self.current_delay_us = tau_s * 1e6  # Convert to µs
         else:
             # Superconducting: 5×T1 adaptive reset
+            if self.current_delay_us <= 0.0:
+                self.current_delay_us = self.base_delay_us
             if anomaly_detected:
                 self.current_delay_us = min(1500.0, self.current_delay_us * 1.20)
                 self.overhead_pct = min(35.0, self.overhead_pct + 4.5)
@@ -247,6 +256,7 @@ class DifferentialMonitor:
         """
         self.window_size = window_size
         self.history: Deque[float] = deque(maxlen=window_size)
+        self._baseline: Deque[float] = deque(maxlen=window_size)
         
         # SPC state
         self.z_score: float = 0.0
@@ -288,8 +298,9 @@ class DifferentialMonitor:
         4. Non-Gaussian: use Student-t with df=5
         """
         self.history.append(telemetry_value)
-        
-        if len(self.history) < 10:
+
+        if len(self._baseline) < 10:
+            self._baseline.append(telemetry_value)
             return {
                 "z_score": 0.0,
                 "threat_level": 0,
@@ -299,39 +310,37 @@ class DifferentialMonitor:
                 "sigma": 0.0,
                 "is_gaussian": True,
             }
-        
-        # Baseline statistics computed strictly over prior observations (arr[:-1]) so
-        # Samuelson's inequality (z <= sqrt(n-1) < 3.5 for n <= 13) cannot self-mask spikes.
-        arr = np.array(list(self.history))
-        baseline = arr[:-1]
+
+        # Baseline statistics computed strictly over nominal (non-anomalous) observations
+        # so sustained attacks stay flagged instead of poisoning the sliding window.
+        baseline = np.array(list(self._baseline))
         mu = float(np.mean(baseline))
         sigma = float(np.std(baseline))
-        
+
         # Noise floor: prevents division-by-zero when all window values are identical.
-        # σ_min = 0.02 ≈ smallest physically resolvable coherence variation (µs).
         sigma = max(0.02, sigma)
         z = abs(telemetry_value - mu) / sigma
-        
+
         self.z_score = z
-        
+
         # Gaussianity check (Kolmogorov-Smirnov) — SPECS §5.4.2
-        if len(self.history) >= 30:
-            std_data = (arr[-30:] - mu) / max(sigma, 1e-10)
+        if len(baseline) >= 30:
+            std_data = (baseline[-30:] - mu) / max(sigma, 1e-10)
             ks_res = scipy_stats.kstest(std_data, 'norm')
             p_value = float(ks_res.pvalue)
             is_gaussian = p_value >= 0.05
         else:
             is_gaussian = True
-        
+
         # Threshold application
         if is_gaussian:
             threshold = self.SIGMA_THRESHOLD
         else:
             # Student-t distribution with df=5 (heavier tails) — SPECS §5.4.2 (two-tailed alpha=10^-3 -> ~6.87)
             threshold = float(scipy_stats.t.ppf(0.9995, df=5))
-        
+
         self.is_anomaly = z >= threshold
-        
+
         # Threat level assignment — SPECS §5.4.3
         if z < self.WARNING_THRESHOLD:
             self.threat_level = 0
@@ -341,9 +350,11 @@ class DifferentialMonitor:
             self.threat_level = 2
         else:
             self.threat_level = 3
-        
+
         if self.is_anomaly:
             self.detection_count += 1
+        else:
+            self._baseline.append(telemetry_value)
         
         # Synthetic frequency (optical lattice platforms)
         syn_freq = self.compute_synthetic_frequency(nu_plus, nu_minus) if nu_plus > 0 else 0.0

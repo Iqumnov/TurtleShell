@@ -115,8 +115,8 @@ def crosstalk(provider, backend, test_qubits, ref_qubits, intensity, api_key, li
         sys.exit(1)
 
 @main.command()
-@click.option("-p", "--provider", default="all", help="Provider name or 'all'")
-@click.option("-s", "--scenario", default="all", help="Scenario name (crosstalk, rowhammer, prime_probe, decoherence, or all)")
+@click.option("-p", "--provider", default="all", type=click.Choice(["all"] + list(PROVIDERS_MAP.keys()), case_sensitive=False), help="Provider name or 'all'")
+@click.option("-s", "--scenario", default="all", type=click.Choice(["all", "crosstalk", "rowhammer", "prime_probe", "rf_leakage", "decoherence", "environment"], case_sensitive=False), help="Scenario name (crosstalk, rowhammer, prime_probe, rf_leakage, decoherence, environment, or all)")
 @click.option("-o", "--output", default="isolation_report.md", help="Path to write the research report (.md or .html)")
 @click.option("--tenants", default=3, type=int, help="Number of concurrent tenants")
 @click.option("--live", is_flag=True)
@@ -124,14 +124,15 @@ def benchmark(provider, scenario, output, tenants, live):
     """Runs a standard benchmark suite and generates a formatted scientific report."""
     mock = not live
     results = []
-    
+    failures = 0
+
     # Selected providers
     prov_names = list(PROVIDERS_MAP.keys()) if provider.lower() == "all" else [provider.lower()]
     if tenants < 1:
         raise click.BadParameter("--tenants must be >= 1")
-    
+
     click.echo(f"[*] Commencing global quantum isolation audit across: {', '.join(prov_names)}")
-    
+
     for name in prov_names:
         backend = f"mock_{name}_backend"
         if name == "ibm":
@@ -146,30 +147,30 @@ def benchmark(provider, scenario, output, tenants, live):
             backend = "aws_braket_rigetti"
         elif name == "simulated":
             backend = "simulated_hybrid_16q"
-            
+
         try:
             prov = get_provider_instance(name, mock=mock)
             prov.connect()
             topo = prov.get_topology(backend)
-            
+
             # Partition test/reference subsets dynamically across requested tenant count
             n = len(topo["qubits"])
             per_tenant = max(1, min(3, n // max(2, tenants)))
             t_qubits = list(range(0, min(per_tenant, n)))
             r_start = min(n - 1, per_tenant + 1)
             r_qubits = list(range(r_start, min(n, r_start + per_tenant))) or [max(0, n - 1)]
-            
+
             scen_lower = scenario.lower()
             if scen_lower in ("all", "crosstalk"):
                 click.echo(f"  [-] Running crosstalk scenario on {backend}...")
                 r_ct = run_crosstalk_audit(prov, backend, t_qubits, r_qubits, "high")
                 results.append(r_ct)
-            
+
             if scen_lower in ("all", "rowhammer"):
                 click.echo(f"  [-] Running Rowhammer simulation on {backend}...")
                 r_rh = run_rowhammer_audit(prov, backend, t_qubits, r_qubits, iterations=600)
                 results.append(r_rh)
-            
+
             if scen_lower in ("all", "prime_probe"):
                 click.echo(f"  [-] Running temporal prime-probe on {backend}...")
                 r_pp = run_prime_probe_audit(prov, backend, r_qubits, delay_us=80.0)
@@ -197,18 +198,23 @@ def benchmark(provider, scenario, output, tenants, live):
                     "leakage_db": leak_db,
                 }
                 results.append(r_rf)
-            
+
             if scen_lower in ("all", "decoherence", "environment"):
                 click.echo(f"  [-] Running environmental decoherence sweep on {backend}...")
                 r_dc = run_decoherence_audit(prov, backend, r_qubits, temperature_mk=25.0)
                 results.append(r_dc)
-            
+
         except Exception as e:
+            failures += 1
             click.echo(f"  [Warning] Failed benchmarking for {name}: {e}", err=True)
-            
+
+    if failures > 0 and not results:
+        click.echo("[Error] Benchmark failed for all selected providers.", err=True)
+        sys.exit(1)
+
     # Generate report
     click.echo(f"[*] Auditing complete. Compiling publication manuscript...")
-    fmt = "html" if output.endswith(".html") else "markdown"
+    fmt = "html" if output.lower().endswith(".html") else "markdown"
     report_content = compile_academic_report(results, format_type=fmt)
     
     with open(output, "w", encoding="utf-8") as f:
@@ -244,9 +250,12 @@ def schedule(platform, tenants, algo):
         qpu = VirtualQPU(platform)
         sched = MultiTenantScheduler(qpu)
         total_q = len(qpu.qubits)
-        share = max(1, total_q // tenants)
-        demands = {i: share for i in range(tenants)}
-        allocations = sched.execute_allocation(algo, demands)
+        if algo == "tdm":
+            demands = {i: total_q if i == 0 else 0 for i in range(tenants)}
+        else:
+            share = max(1, total_q // tenants)
+            demands = {i: share for i in range(tenants)}
+        allocations = sched.execute_allocation(algo, demands, defense_l1_active=(algo == "spectral"))
         iso_index = qpu.compute_isolation_index(allocations, defense_l1_active=(algo == "spectral"))
         
         click.echo(f"[+] Physical QPU Size: {total_q} qubits, {len(qpu.couplers)} couplers")
@@ -288,6 +297,8 @@ def verify_qutip(tau):
             click.echo(f"[+] Master Equation Max Absolute Error: {err_str}")
             status_label = "VERIFIED (Tolerance: < 1e-3)" if (err is not None and err < 1e-3) else f"WARNING (Error {err_str} >= 1e-3)"
             click.echo(f"[+] Contour 3 Cooling Status: {status_label}")
+            if err is None or err >= 1e-3:
+                sys.exit(1)
         else:
             click.echo(f"[+] Analytical Mode Trajectory Check: VERIFIED (Closed-form solution valid)")
             click.echo(f"    (Note: Install 'qutip' for numeric mesolve Lindblad solver integration)")

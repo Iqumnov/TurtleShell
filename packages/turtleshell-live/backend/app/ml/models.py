@@ -80,17 +80,17 @@ class TelemetryAutoencoder:
         self.layout_type = layout_type
         t = (layout_type or "eagle").lower()
         if "trapped_ion" in t:
-            nominal_loc = [1e6, 5e5, 2e4, 1e-4, 1e-3, 0.24, 0.98, 0.05, 0.08, -60.0, 1e-6, 1e-6, 0.002001, -0.000999, 0.0, 0.0]
-            nominal_scale = [3e4, 2e4, 4e3, 2e-5, 2e-4, 0.20, 0.05, 0.05, 0.25, 6.0, 1e-4, 1e-4, 1e-4, 1e-4, 0.0, 0.0]
+            nominal_loc = [1e6, 5e5, 2e4, 1e-4, 1e-3, 0.24, 0.70, 0.05, 0.08, -60.0, 1e-6, 1e-6, 0.002001, 0.0, 0.0, 0.0]
+            nominal_scale = [3e4, 2e4, 4e3, 2e-5, 2e-4, 0.25, 0.35, 0.05, 0.25, 6.0, 1e-4, 1e-4, 1e-4, 1e-4, 0.0, 0.0]
         elif "sr_optical" in t or "optical_lattice" in t:
-            nominal_loc = [6e7, 3e7, 6e5, 1e-4, 5e-3, 0.05, 0.98, 0.0, 0.0, -80.0, 300.0, 300.0, 300.002, 299.999, 0.0, 0.0]
-            nominal_scale = [1e6, 5e5, 1e5, 2e-5, 5e-4, 0.01, 0.05, 0.001, 0.001, 2.0, 3.5, 3.5, 3.5, 3.5, 0.0, 0.0]
+            nominal_loc = [6e7, 3e7, 6e5, 1e-4, 5e-3, 0.05, 0.85, 0.0, 0.0, -80.0, 300.0, 300.0, 300.002, 299.999, 0.0, 0.0]
+            nominal_scale = [1e6, 5e5, 1e5, 2e-5, 5e-4, 0.03, 0.20, 0.001, 0.001, 2.0, 3.5, 3.5, 3.5, 3.5, 0.0, 0.0]
         elif "heron" in t:
-            nominal_loc = [172.0, 115.0, 12.0, 1e-3, 2e-2, 1.1, 0.97, 0.0, 0.0, -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
-            nominal_scale = [14.0, 10.0, 3.0, 1e-4, 2e-3, 0.15, 0.05, 0.001, 0.001, 1.0, 0.002, 0.002, 0.002, 0.002, 0.0, 0.0]
+            nominal_loc = [172.0, 115.0, 12.0, 1e-3, 2e-2, 1.1, 0.90, 0.0, 0.0, -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
+            nominal_scale = [14.0, 10.0, 3.0, 1e-4, 2e-3, 0.25, 0.15, 0.001, 0.001, 1.0, 0.002, 0.002, 0.002, 0.002, 0.0, 0.0]
         else:
-            nominal_loc = [148.0, 96.0, 12.0, 1e-3, 2e-2, 4.8, 0.97, 0.0, 0.0, -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
-            nominal_scale = [12.0, 8.0, 3.0, 1e-4, 2e-3, 0.2, 0.05, 0.001, 0.001, 1.0, 0.002, 0.002, 0.002, 0.002, 0.0, 0.0]
+            nominal_loc = [148.0, 96.0, 12.0, 1e-3, 2e-2, 4.8, 0.95, 0.0, 0.0, -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
+            nominal_scale = [12.0, 8.0, 3.0, 1e-4, 2e-3, 0.25, 0.10, 0.001, 0.001, 1.0, 0.002, 0.002, 0.002, 0.002, 0.0, 0.0]
 
         rng = np.random.default_rng(42)
         baseline_raw = rng.normal(
@@ -104,7 +104,7 @@ class TelemetryAutoencoder:
 
         reconstructed_baseline = self.pca.inverse_transform(self.pca.transform(scaled_baseline))
         baseline_mses = np.mean((scaled_baseline - reconstructed_baseline) ** 2, axis=1)
-        self.spc_threshold = float(np.percentile(baseline_mses, 95))
+        self.spc_threshold = float(np.percentile(baseline_mses, 99.5) * 1.25)
 
     def reconstruct(self, telemetry_vector: List[float]) -> Tuple[float, bool]:
         """
@@ -116,7 +116,7 @@ class TelemetryAutoencoder:
         vec = np.array(telemetry_vector, dtype=float).reshape(1, -1)
         if vec.shape[1] != self.input_dim:
             if vec.shape[1] < self.input_dim:
-                vec = np.pad(vec, ((0, 0), (0, self.input_dim - vec.shape[1])), mode='edge')
+                vec = np.pad(vec, ((0, 0), (0, self.input_dim - vec.shape[1])), mode='constant', constant_values=0.0)
             else:
                 vec = vec[:, :self.input_dim]
                 

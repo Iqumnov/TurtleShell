@@ -314,7 +314,7 @@ class VirtualQPU:
         # No tunable couplers: Contour 1 cannot detune boundary bonds → full ZZ remains
         self.residual_floor = 1.0
 
-        self.platform_display_name = "SuperconductingIBM Eagle (127Q Heavy-Hex)"
+        self.platform_display_name = "Superconducting IBM Eagle (127Q Heavy-Hex)"
         self.platform_description = "IBM Eagle processor, T1≈148µs, ZZ≈4.8kHz"
 
     # ─── IBM Heron ───────────────────────────────────────────────────────────
@@ -369,7 +369,7 @@ class VirtualQPU:
         # (1.1 kHz × 0.15 ≈ 0.165 kHz residual, consistent with Paper #1 §5.1)
         self.residual_floor = 0.15
 
-        self.platform_display_name = "SuperconductingIBM Heron (133Q Tunable Couplers)"
+        self.platform_display_name = "Superconducting IBM Heron (133Q Tunable Couplers)"
         self.platform_description = "IBM Heron processor, T1≈172µs, ZZ≈1.1kHz (tunable)"
 
     # ─── Phonon Physics ───────────────────────────────────────────────────────
@@ -515,7 +515,7 @@ class VirtualQPU:
         base_temp = float(self.temperature_k)
         if avg_t1 < 100 and "trapped" not in self.layout_type:
             base_temp = max(base_temp, 0.025)
-        metrics.extend([base_temp, base_temp + 0.002, base_temp - 0.001])
+        metrics.extend([base_temp, base_temp + 0.002, max(0.0, base_temp - 0.001)])
         
         # Deterministic padding to 16 dimensions (no random noise injection)
         while len(metrics) < 16:

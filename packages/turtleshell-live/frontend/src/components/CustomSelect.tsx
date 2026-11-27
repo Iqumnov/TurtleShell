@@ -33,10 +33,18 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const updateCoords = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
+      const approxMenuHeight = Math.min(224, options.length * 30 + 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < approxMenuHeight && rect.top > approxMenuHeight;
+      const top = openUpward
+        ? Math.max(8, rect.top - approxMenuHeight - 2)
+        : Math.min(window.innerHeight - 48, rect.bottom + 2);
+      const maxWidth = Math.min(380, window.innerWidth - 16);
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - Math.max(rect.width, 160) - 8));
       setCoords({
-        top: rect.bottom + window.scrollY + 2,
-        left: rect.left + window.scrollX,
-        width: rect.width,
+        top,
+        left,
+        width: Math.min(rect.width, maxWidth),
       });
     }
   };
@@ -49,7 +57,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     setIsOpen(!isOpen);
   };
 
-  // Close dropdown on click outside, scroll, or resize
+  // Close dropdown on click outside, outer scroll, resize, or Escape
   useEffect(() => {
     if (!isOpen) return;
 
@@ -62,18 +70,34 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       }
     };
 
-    const handleScrollOrResize = () => {
+    const handleScrollOrResize = (e: Event) => {
+      if (
+        e.type === 'scroll' &&
+        menuRef.current &&
+        e.target instanceof Node &&
+        menuRef.current.contains(e.target)
+      ) {
+        return;
+      }
       setIsOpen(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('scroll', handleScrollOrResize, true);
     window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScrollOrResize, true);
       window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen]);
 
@@ -118,10 +142,10 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             ref={menuRef}
             className="fixed bg-[var(--panel-bg)] border border-[var(--border-bright)] shadow-2xl max-h-56 overflow-y-auto font-mono text-xs"
             style={{
-              top: `${coords.top - window.scrollY}px`,
-              left: `${coords.left - window.scrollX}px`,
+              top: `${coords.top}px`,
+              left: `${coords.left}px`,
               minWidth: `${coords.width}px`,
-              maxWidth: '380px',
+              maxWidth: 'min(380px, calc(100vw - 16px))',
               zIndex: 999999,
               animation: 'dropdownSlideDown 160ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
             }}

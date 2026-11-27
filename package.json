@@ -7,6 +7,8 @@
   "scripts": {
     "dev:frontend": "pnpm --filter turtleshell-live-frontend dev",
     "build:frontend": "pnpm --filter turtleshell-live-frontend build",
+    "lint:frontend": "pnpm --filter turtleshell-live-frontend lint",
+    "preview:frontend": "pnpm --filter turtleshell-live-frontend preview",
     "dev:backend": "cd packages/turtleshell-live/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
     "test:backend": "cd packages/turtleshell-live/backend && pytest",
     "test:cli": "cd packages/quantum-isolation-benchmark && pytest",
@@ -17,8 +19,8 @@
     "security",
     "isolation",
     "crosstalk",
-    "qiskit",
-    "threejs"
+    "qutip",
+    "spectral-clustering"
   ],
   "author": "",
   "license": "MIT",

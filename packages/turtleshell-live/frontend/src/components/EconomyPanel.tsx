@@ -25,23 +25,36 @@ export const EconomyPanel: React.FC = () => {
 
   if (!metrics) return null;
 
-  // ── Derived financials ───────────────────────────────────────────────────────
+  // ── Chart history & Scrub-aware metrics ──────────────────────────────────────
+  const scrubIndex    = store.scrubIndex;
+  const historyLength = history.labels.length;
+  const activeIndex   = scrubIndex !== null && historyLength > 0 ? Math.min(scrubIndex, historyLength - 1) : historyLength - 1;
+  const isScrubbing   = scrubIndex !== null && historyLength > 0;
+
   const baseFidelity    = store.qpuType.includes('trapped_ion')
     ? 0.995
     : store.qpuType.includes('sr_optical')
       ? 0.999
       : 0.94;
-  const currentFidelity = metrics.fidelity ?? baseFidelity;
-  const rawFailureRate  = Math.max(0.0, 1.0 - (currentFidelity / baseFidelity));
-  const baseRunCost     = (store.hourlyCost * (store.utilization / 100.0)) / 360.0;
-  const wastedQpuCash   = metrics.cumulative_wasted_cash ?? (rawFailureRate * baseRunCost * 2.5);
-  const perStepCost     = baseRunCost + (metrics.time_step > 0 ? (metrics.cumulative_costs / metrics.time_step) : 0);
-  const costPerJob      = perStepCost / Math.max(0.1, currentFidelity / baseFidelity);
+  const displayFidelity = isScrubbing && history.fidelity[activeIndex] !== undefined
+    ? history.fidelity[activeIndex] / 100.0
+    : (metrics.fidelity ?? baseFidelity);
+  const displaySavings  = isScrubbing ? (history.savings[activeIndex] ?? metrics.cumulative_savings) : metrics.cumulative_savings;
+  const displayCosts    = isScrubbing ? (history.costs[activeIndex] ?? metrics.cumulative_costs) : metrics.cumulative_costs;
+  const displayWasted   = isScrubbing
+    ? (history.wastedCash[activeIndex] ?? metrics.cumulative_wasted_cash ?? 0)
+    : (metrics.cumulative_wasted_cash ?? 0);
+  const displayDropPct  = isScrubbing
+    ? Math.max(0.0, (baseFidelity - displayFidelity) * 100.0)
+    : metrics.fidelity_drop;
+  const parsedLabelStep = isScrubbing && history.labels[activeIndex]
+    ? parseInt(history.labels[activeIndex].replace('#', ''), 10)
+    : metrics.time_step;
+  const displayStep     = Number.isFinite(parsedLabelStep) && parsedLabelStep > 0 ? parsedLabelStep : metrics.time_step;
 
-  // ── Chart history ────────────────────────────────────────────────────────────
-  const scrubIndex    = store.scrubIndex;
-  const historyLength = history.labels.length;
-  const activeIndex   = scrubIndex !== null ? Math.min(scrubIndex, historyLength - 1) : historyLength - 1;
+  const baseRunCost     = (store.hourlyCost * (store.utilization / 100.0)) / 360.0;
+  const perStepCost     = baseRunCost + (displayStep > 0 ? (displayCosts / displayStep) : 0);
+  const costPerJob      = perStepCost / Math.max(0.1, displayFidelity / baseFidelity);
 
   const chartData = history.labels.slice(0, activeIndex + 1).map((lbl, idx) => ({
     time:    lbl,
@@ -51,10 +64,10 @@ export const EconomyPanel: React.FC = () => {
 
   // ── Metric cards config ──────────────────────────────────────────────────────
   const cards = [
-    { label: t.avoidedLoss,           value: `$${metrics.cumulative_savings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { label: t.operationOpex,         value: `$${metrics.cumulative_costs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { label: t.wastedQpuCash,         value: `$${wastedQpuCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { label: t.slaBreachProb,         value: `${metrics.fidelity_drop.toFixed(2)}%` },
+    { label: t.avoidedLoss,           value: `$${displaySavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+    { label: t.operationOpex,         value: `$${displayCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+    { label: t.wastedQpuCash,         value: `$${displayWasted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+    { label: t.slaBreachProb,         value: `${displayDropPct.toFixed(2)}%` },
     { label: t.costPerLogicalFidelity, value: `$${costPerJob.toFixed(2)}` },
     {
       label: t.hourlyQpuCost,

@@ -216,7 +216,8 @@ class IBMProvider(QuantumProvider):
             gate_errors[f"ecr_{edge[0]}_{edge[1]}"] = max(0.001, float(rng.normal(err_2q_mean, 0.002)))
             # ZZ crosstalk value in kHz (mean of 4.8 kHz on Eagle, 1.1 kHz with Tunable Couplers on Heron)
             base_zz = 1.1 if is_heron else 4.8
-            crosstalk[f"{edge[0]}_{edge[1]}"] = max(0.1, float(rng.normal(base_zz, 0.5)))
+            zz_std = 0.15 if is_heron else 0.2
+            crosstalk[f"{edge[0]}_{edge[1]}"] = max(0.1, float(rng.normal(base_zz, zz_std)))
             
         return {
             "T1": t1,
@@ -262,7 +263,7 @@ class IBMProvider(QuantumProvider):
                             counts = getattr(data, field).get_counts()
                             break
                     if counts is None:
-                        keys = list(getattr(data, "__dict__", {}).keys())
+                        keys = [k for k in (getattr(data, "__dict__", {}).keys() or dir(data)) if not k.startswith("_") and hasattr(getattr(data, k, None), "get_counts")]
                         counts = getattr(data, keys[0]).get_counts() if keys else {}
                     counts_list.append(counts)
                 return counts_list
