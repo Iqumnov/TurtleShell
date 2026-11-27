@@ -47,14 +47,17 @@ else
     echo "[*] lake not present, skipping Lean 4 proof build."
 fi
 
-echo "[+] 4. Checking frontend build (if node/npm available)..."
-if command -v npm >/dev/null 2>&1 && [ -d "${ROOT_DIR}/packages/turtleshell-live/frontend" ]; then
-    cd "${ROOT_DIR}/packages/turtleshell-live/frontend"
-    if [ -d "node_modules" ]; then
-        npm run build
-    else
-        echo "[*] node_modules not present, skipping Vite build."
+echo "[+] 4. Checking frontend build (if pnpm/npm available)..."
+if [ -d "${ROOT_DIR}/packages/turtleshell-live/frontend/node_modules" ]; then
+    if command -v pnpm >/dev/null 2>&1; then
+        (cd "${ROOT_DIR}" && pnpm --filter turtleshell-live-frontend build)
+    elif command -v corepack >/dev/null 2>&1; then
+        (cd "${ROOT_DIR}" && corepack pnpm --filter turtleshell-live-frontend build)
+    elif command -v npm >/dev/null 2>&1; then
+        (cd "${ROOT_DIR}/packages/turtleshell-live/frontend" && npm run build)
     fi
+else
+    echo "[*] node_modules not present, skipping Vite build."
 fi
 
 echo "================================================================"

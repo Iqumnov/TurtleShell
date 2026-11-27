@@ -134,7 +134,7 @@ pip install -e packages/quantum-isolation-benchmark
 pip install -r packages/turtleshell-live/backend/requirements.txt
 
 # 4. Install web app dependencies (optional; auto-installed by runner)
-cd packages/turtleshell-live/frontend && npm install && cd ../../..
+pnpm install
 
 # 5. Start live dashboard
 ./run_live.sh  # On Windows PowerShell: .\run_live.ps1

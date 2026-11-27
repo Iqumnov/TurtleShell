@@ -44,14 +44,19 @@ else
 fi
 
 # Launch frontend
-if command -v npm >/dev/null 2>&1 && [ -f "${FRONTEND_DIR}/package.json" ]; then
-    cd "${FRONTEND_DIR}"
-    if [ ! -d "node_modules" ]; then
-        echo "[*] Installing frontend dependencies (npm install)..."
-        npm install
+if [ -f "${FRONTEND_DIR}/package.json" ] && { command -v pnpm >/dev/null 2>&1 || command -v corepack >/dev/null 2>&1 || command -v npm >/dev/null 2>&1; }; then
+    if [ ! -d "${FRONTEND_DIR}/node_modules" ]; then
+        echo "[*] Installing frontend dependencies..."
+        if command -v pnpm >/dev/null 2>&1; then
+            (cd "${ROOT_DIR}" && pnpm install --frozen-lockfile)
+        elif command -v corepack >/dev/null 2>&1; then
+            (cd "${ROOT_DIR}" && corepack pnpm install --frozen-lockfile)
+        else
+            (cd "${FRONTEND_DIR}" && npm install)
+        fi
     fi
     echo "[+] Starting frontend on http://localhost:5173..."
-    
+
     # Try opening browser
     (
         sleep 2
@@ -62,7 +67,13 @@ if command -v npm >/dev/null 2>&1 && [ -f "${FRONTEND_DIR}/package.json" ]; then
         fi
     ) &
 
-    npm run dev || {
+    if command -v pnpm >/dev/null 2>&1; then
+        (cd "${ROOT_DIR}" && pnpm --filter turtleshell-live-frontend dev)
+    elif command -v corepack >/dev/null 2>&1; then
+        (cd "${ROOT_DIR}" && corepack pnpm --filter turtleshell-live-frontend dev)
+    else
+        (cd "${FRONTEND_DIR}" && npm run dev)
+    fi || {
         echo "[!] Dev server exited. You can also view the static deployment at: https://turtleshell.iqumnov.com"
     }
 else

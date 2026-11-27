@@ -119,13 +119,25 @@ if [ -f "${VENV_DIR}/bin/qib" ]; then
     fi
 fi
 
-# 6. Install Web App Dependencies (Node.js & npm)
+# 6. Install Web App Dependencies (Node.js & pnpm)
 FRONTEND_DIR="${ROOT_DIR}/packages/turtleshell-live/frontend"
-if command -v npm >/dev/null 2>&1 && [ -d "${FRONTEND_DIR}" ]; then
-    echo -e "${GREEN}[+]${RESET} Node.js detected: $(node --version). Installing local web app dependencies..."
-    (cd "${FRONTEND_DIR}" && npm install >/dev/null 2>&1) || {
-        echo -e "${YELLOW}[*] Local npm install completed with warnings. Live UI remains ready via client-side engine.${RESET}"
-    }
+if [ -d "${FRONTEND_DIR}" ]; then
+    if command -v pnpm >/dev/null 2>&1; then
+        echo -e "${GREEN}[+]${RESET} pnpm detected ($(pnpm --version)). Installing local web app dependencies..."
+        (cd "${ROOT_DIR}" && pnpm install --frozen-lockfile >/dev/null 2>&1) || {
+            echo -e "${YELLOW}[*] Local pnpm install completed with warnings. Live UI remains ready via client-side engine.${RESET}"
+        }
+    elif command -v corepack >/dev/null 2>&1; then
+        echo -e "${GREEN}[+]${RESET} Node.js detected: $(node --version). Installing local web app dependencies via corepack pnpm..."
+        (cd "${ROOT_DIR}" && corepack pnpm install --frozen-lockfile >/dev/null 2>&1) || {
+            echo -e "${YELLOW}[*] Local pnpm install completed with warnings. Live UI remains ready via client-side engine.${RESET}"
+        }
+    elif command -v npm >/dev/null 2>&1; then
+        echo -e "${GREEN}[+]${RESET} Node.js detected: $(node --version). Installing local web app dependencies..."
+        (cd "${FRONTEND_DIR}" && npm install >/dev/null 2>&1) || {
+            echo -e "${YELLOW}[*] Local npm install completed with warnings. Live UI remains ready via client-side engine.${RESET}"
+        }
+    fi
 fi
 
 echo -e "\n${BOLD}${GREEN}================================================================${RESET}"

@@ -2,6 +2,7 @@
   "name": "turtleshell-monorepo",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@9.15.0",
   "description": "TurtleShell — Quantum Cloud Isolation Research Platform",
   "scripts": {
     "dev:frontend": "pnpm --filter turtleshell-live-frontend dev",
