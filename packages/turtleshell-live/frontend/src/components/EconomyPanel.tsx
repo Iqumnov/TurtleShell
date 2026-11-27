@@ -26,13 +26,17 @@ export const EconomyPanel: React.FC = () => {
   if (!metrics) return null;
 
   // ── Derived financials ───────────────────────────────────────────────────────
-  const currentFidelity = metrics.fidelity ?? 0.94;
-  const rawFailureRate  = Math.max(0.0, 1.0 - (currentFidelity / 0.94));
+  const baseFidelity    = store.qpuType.includes('trapped_ion')
+    ? 0.995
+    : store.qpuType.includes('sr_optical')
+      ? 0.999
+      : 0.94;
+  const currentFidelity = metrics.fidelity ?? baseFidelity;
+  const rawFailureRate  = Math.max(0.0, 1.0 - (currentFidelity / baseFidelity));
   const baseRunCost     = (store.hourlyCost * (store.utilization / 100.0)) / 360.0;
   const wastedQpuCash   = metrics.cumulative_wasted_cash ?? (rawFailureRate * baseRunCost * 2.5);
-  const costPerJob      = metrics.time_step > 0
-    ? (metrics.cumulative_costs / metrics.time_step) / Math.max(0.1, currentFidelity / 0.94)
-    : 0;
+  const perStepCost     = baseRunCost + (metrics.time_step > 0 ? (metrics.cumulative_costs / metrics.time_step) : 0);
+  const costPerJob      = perStepCost / Math.max(0.1, currentFidelity / baseFidelity);
 
   // ── Chart history ────────────────────────────────────────────────────────────
   const scrubIndex    = store.scrubIndex;

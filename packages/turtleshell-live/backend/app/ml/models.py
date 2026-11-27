@@ -39,16 +39,19 @@ class CompilerAnomalyDetector:
         
         Returns: (is_secure, confidence_score, circuit_hash_sha256)
         """
-        arr = np.array(circuit_features).reshape(1, -1)
+        arr = np.array(circuit_features[:4], dtype=float).reshape(1, -1)
+        if arr.shape[1] < 4:
+            raise ValueError("verify_circuit requires at least 4 compiler features")
         pred = self.model.predict(arr)[0]
         score = float(self.model.score_samples(arr)[0])
         
         # SHA-256 hash computation of graph rules + mapping (SPECS §5.2.1)
-        hash_input = f"swap_gates:{circuit_features[0]}_gate_depth:{circuit_features[1]}_cz_density:{circuit_features[2]}_pulse_width:{circuit_features[3]}".encode('utf-8')
+        f = [float(x) for x in circuit_features[:4]]
+        hash_input = f"swap_gates:{f[0]}_gate_depth:{f[1]}_cz_density:{f[2]}_pulse_width:{f[3]}".encode('utf-8')
         circuit_hash = hashlib.sha256(hash_input).hexdigest()
         
         target_ref = reference_hash or self.expected_nominal_hash
-        hash_verified = (circuit_hash == target_ref) or (circuit_features == [5.0, 45.0, 10.0, 220.0])
+        hash_verified = (circuit_hash == target_ref)
         
         is_secure = hash_verified and bool(pred == 1) and score > -0.6
         confidence = float(1.0 / (1.0 + np.exp(-10.0 * (score + 0.5))))
@@ -63,45 +66,42 @@ class TelemetryAutoencoder:
     reconstruction error (MSE) on nominal telemetry vectors (SPECS §5.4.2).
     """
 
-    def __init__(self, input_dim: int = 16, n_components: int = 4):
+    def __init__(self, input_dim: int = 16, n_components: int = 4, layout_type: str = "eagle"):
         self.input_dim = input_dim
         self.n_components = n_components
+        self.layout_type = layout_type
         self.scaler = StandardScaler()
-        
-        # Nominal feature means and scales EXACTLY matching get_telemetry_vector() layout:
-        # [0]  avg_t1          µs        IBM Eagle baseline ~148 µs
-        # [1]  avg_t2          µs        IBM Eagle baseline ~96 µs
-        # [2]  std_t1          µs        fabrication spread ~12 µs (2% of 148)
-        # [3]  avg_1q_err      frac      1e-3 for SC, 1e-4 for ions
-        # [4]  avg_readout     frac      2e-2 for SC
-        # [5]  avg_zz_khz      kHz       Eagle ~4.8 kHz
-        # [6]  coupler_ratio   0-1       fraction of active couplers
-        # [7]  phonon_n        phonons   near-ground-state for SC: 0.0
-        # [8]  heating_rate    ph/s      0.0 for SC
-        # [9]  rf_leakage_db   dBm       -50.0 for SC Eagle
-        # [10] temperature_k   K         0.015 for SC (15 mK)
-        # [11] base_temp       K         same as [10]
-        # [12] base_temp+0.002 K         second temperature sensor
-        # [13] base_temp-0.001 K         third temperature sensor
-        # [14] padding         0.0
-        # [15] padding         0.0
-        rng = np.random.default_rng(42)
-        nominal_loc   = [148.0, 96.0,  12.0,  1e-3,  2e-2,  4.8,  0.97, 0.0,   0.0,  -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
-        nominal_scale = [ 12.0,  8.0,   2.0,  1e-4,  2e-3,  0.2,  0.02, 0.001, 0.001,  1.0,  0.001, 0.001, 0.001, 0.001, 0.0, 0.0]
-        
-        baseline_raw = rng.normal(
-            loc=nominal_loc[:input_dim],
-            scale=[max(s, 1e-9) for s in nominal_scale[:input_dim]],
-            size=(1000, input_dim)
-        )
-        
-        # Fit scaler directly on raw nominal telemetry vectors
-        scaled_baseline = self.scaler.fit_transform(baseline_raw)
-        
         self.pca = PCA(n_components=n_components, random_state=42)
+        self.spc_threshold: float = 1.0
+        self.set_platform(layout_type)
+
+    def set_platform(self, layout_type: str) -> None:
+        """Fit normalization scaler & PCA subspace to the active QPU architecture baseline."""
+        self.layout_type = layout_type
+        t = (layout_type or "eagle").lower()
+        if "trapped_ion" in t:
+            nominal_loc = [1e6, 5e5, 2e4, 1e-4, 1e-3, 0.24, 0.98, 0.05, 0.08, -60.0, 1e-6, 1e-6, 0.002001, -0.000999, 0.0, 0.0]
+            nominal_scale = [3e4, 2e4, 4e3, 2e-5, 2e-4, 0.20, 0.05, 0.05, 0.25, 6.0, 1e-4, 1e-4, 1e-4, 1e-4, 0.0, 0.0]
+        elif "sr_optical" in t or "optical_lattice" in t:
+            nominal_loc = [6e7, 3e7, 6e5, 1e-4, 5e-3, 0.05, 0.98, 0.0, 0.0, -80.0, 300.0, 300.0, 300.002, 299.999, 0.0, 0.0]
+            nominal_scale = [1e6, 5e5, 1e5, 2e-5, 5e-4, 0.01, 0.05, 0.001, 0.001, 2.0, 3.5, 3.5, 3.5, 3.5, 0.0, 0.0]
+        elif "heron" in t:
+            nominal_loc = [172.0, 115.0, 12.0, 1e-3, 2e-2, 1.1, 0.97, 0.0, 0.0, -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
+            nominal_scale = [14.0, 10.0, 3.0, 1e-4, 2e-3, 0.15, 0.05, 0.001, 0.001, 1.0, 0.002, 0.002, 0.002, 0.002, 0.0, 0.0]
+        else:
+            nominal_loc = [148.0, 96.0, 12.0, 1e-3, 2e-2, 4.8, 0.97, 0.0, 0.0, -50.0, 0.015, 0.015, 0.017, 0.014, 0.0, 0.0]
+            nominal_scale = [12.0, 8.0, 3.0, 1e-4, 2e-3, 0.2, 0.05, 0.001, 0.001, 1.0, 0.002, 0.002, 0.002, 0.002, 0.0, 0.0]
+
+        rng = np.random.default_rng(42)
+        baseline_raw = rng.normal(
+            loc=nominal_loc[:self.input_dim],
+            scale=[max(s, 1e-9) for s in nominal_scale[:self.input_dim]],
+            size=(1000, self.input_dim)
+        )
+        scaled_baseline = self.scaler.fit_transform(baseline_raw)
+        self.pca = PCA(n_components=min(self.n_components, self.input_dim), random_state=42)
         self.pca.fit(scaled_baseline)
-        
-        # Compute baseline nominal reconstruction MSE 95th-percentile threshold
+
         reconstructed_baseline = self.pca.inverse_transform(self.pca.transform(scaled_baseline))
         baseline_mses = np.mean((scaled_baseline - reconstructed_baseline) ** 2, axis=1)
         self.spc_threshold = float(np.percentile(baseline_mses, 95))

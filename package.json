@@ -1,6 +1,6 @@
 {
   "name": "turtleshell-monorepo",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "TurtleShell — Quantum Cloud Isolation Research Platform",
   "scripts": {

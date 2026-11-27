@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-VERSION="${TURTLESHELL_VERSION:-v0.1.0}"
+VERSION="${TURTLESHELL_VERSION:-v1.0.0}"
 
 # ANSI Colors (Monochrome Tactical)
 BOLD="\033[1m"
@@ -93,16 +93,16 @@ VENV_PYTHON="${VENV_DIR}/bin/python"
 VENV_PIP="${VENV_DIR}/bin/pip"
 
 echo -e "${GREEN}[+]${RESET} Upgrading pip and build tools..."
-"${VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel >/dev/null 2>&1 || true
+"${VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel
 
 echo -e "${GREEN}[+]${RESET} Installing TurtleShell Python packages..."
-"${VENV_PIP}" install --no-build-isolation -e "${ROOT_DIR}/packages/quantum-isolation-benchmark" >/dev/null 2>&1 || {
-    "${VENV_PIP}" install -e "${ROOT_DIR}/packages/quantum-isolation-benchmark" >/dev/null 2>&1 || true
+"${VENV_PIP}" install --no-build-isolation -e "${ROOT_DIR}/packages/quantum-isolation-benchmark" || {
+    "${VENV_PIP}" install -e "${ROOT_DIR}/packages/quantum-isolation-benchmark"
 }
 
 if [ -f "${ROOT_DIR}/packages/turtleshell-live/backend/requirements.txt" ]; then
     echo -e "${GREEN}[+]${RESET} Installing live backend dependencies..."
-    "${VENV_PIP}" install -r "${ROOT_DIR}/packages/turtleshell-live/backend/requirements.txt" >/dev/null 2>&1 || true
+    "${VENV_PIP}" install -r "${ROOT_DIR}/packages/turtleshell-live/backend/requirements.txt"
 fi
 
 # 5. Link qib CLI

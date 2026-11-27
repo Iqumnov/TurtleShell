@@ -74,19 +74,24 @@ def test_reports_compilation():
         {
             "backend": "ibm_brisbane",
             "scenario": "Quantum-Rowhammer",
+            "iterations": 600,
             "average_T1_degradation_pct": 12.5,
-            "victim_qubits_affected": [0, 1]
+            "vulnerable_nodes_flagged": 2
         },
         {
             "backend": "ibm_brisbane",
             "scenario": "Prime-and-Probe",
-            "residual_excitation_pct": 5.2,
+            "delay_us": 80.0,
+            "interference_reduction_pct": 5.2,
+            "average_T1_us": 148.0,
             "phonon_n_bar": 0.05
         },
         {
             "backend": "ibm_brisbane",
             "scenario": "Environmental-Decoherence",
-            "degradation_factor": 0.85
+            "temperature_mk": 25.0,
+            "degradation_factor": 0.85,
+            "predicted_fidelity": 0.946
         }
     ]
 
@@ -94,10 +99,14 @@ def test_reports_compilation():
     md_content = compile_academic_report(results, format_type="markdown")
     assert "Empirical Analysis of Process Isolation" in md_content
     assert "ZZ-Crosstalk" in md_content
+    assert "None" not in md_content
 
     # HTML report
     html_content = compile_academic_report(results, format_type="html")
     assert "<html>" in html_content
+    assert "<strong>" in html_content
+    assert "- **" not in html_content
+    assert "None" not in html_content
     assert "IEEE P7130" not in html_content
 
 

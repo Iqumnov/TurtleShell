@@ -40,20 +40,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: packages/turtleshell-live/frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: packages/turtleshell-live/frontend
-        run: pnpm install --no-frozen-lockfile
+        run: npm ci
 
-      - name: Build frontend
+      - name: Typecheck & build frontend
         working-directory: packages/turtleshell-live/frontend
-        run: pnpm run build
+        run: npm run build
+
+  verify-lean:
+    name: Lean 4 Formal Proofs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Lean 4 formal proofs
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: proofs
+          build: true

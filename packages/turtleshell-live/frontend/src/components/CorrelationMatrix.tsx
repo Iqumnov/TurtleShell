@@ -16,7 +16,7 @@ export const CorrelationMatrix: React.FC = () => {
   } | null>(null);
 
   const variables = [
-    { key: "temp", label: t.cryoTempLabel },
+    { key: "temp", label: store.qpuType.includes("trapped_ion") ? (lang === 'RU' ? "Фононы n̄" : "Phonons n̄") : t.cryoTempLabel },
     { key: "tenants", label: t.tenantCountLabel },
     { key: "t1", label: t.avgT1Label },
     { key: "aeLoss", label: t.aeLossLabel },
@@ -61,6 +61,12 @@ export const CorrelationMatrix: React.FC = () => {
     },
   };
 
+  const scrubIndex = store.scrubIndex;
+  const maxLen = history.labels.length;
+  const endIdx = scrubIndex !== null && maxLen > 0
+    ? Math.max(1, Math.min(scrubIndex + 1, maxLen))
+    : maxLen;
+
   const getDynamicPearsonCell = (v1Key: string, v2Key: string): { val: number; desc: string } => {
     const isRu = lang === 'RU';
     if (v1Key === v2Key) return { val: 1.0, desc: isRu ? "Автокорреляция." : "Self correlation." };
@@ -68,12 +74,29 @@ export const CorrelationMatrix: React.FC = () => {
     const baseVal = baseObj ? baseObj.val : 0.0;
     const desc = baseObj ? (isRu ? baseObj.descRu : baseObj.desc) : (isRu ? "Корреляция метрик телеметрии." : "Telemetry metric correlation.");
 
+    const isIon = store.qpuType.includes("trapped_ion");
     const getArr = (key: string): number[] => {
-      if (key === 'temp') return history.phonon.length ? history.phonon : [];
-      if (key === 'tenants') return history.qpu.length ? history.qpu.map((qState) => qState.qubits ? qState.qubits.filter(q => q.active_tenant !== null).length : 1) : [];
-      if (key === 't1') return history.fidelity.length ? history.fidelity.map((f) => 147.13 * (f / 0.94)) : [];
-      if (key === 'aeLoss') return history.lossL4.length ? history.lossL4 : [];
-      if (key === 'fidelity') return history.fidelity.length ? history.fidelity : [];
+      if (key === 'temp') {
+        if (isIon) return history.phonon.slice(0, endIdx);
+        return history.qpu.slice(0, endIdx).map((qState) => qState.temperature_k ?? 0.015);
+      }
+      if (key === 'tenants') {
+        return history.qpu.slice(0, endIdx).map((qState) => {
+          const qs = qState.qubits ?? [];
+          const uniq = new Set<number>();
+          for (const q of qs) {
+            if (q.active_tenant !== null) uniq.add(q.active_tenant);
+          }
+          return uniq.size > 0 ? uniq.size : 1;
+        });
+      }
+      if (key === 't1') return history.qpu.slice(0, endIdx).map((qState) => {
+        const qs = qState.qubits ?? [];
+        if (qs.length === 0) return 0;
+        return qs.reduce((acc, q) => acc + (q.t1 ?? 0), 0) / qs.length;
+      });
+      if (key === 'aeLoss') return history.lossL4.slice(0, endIdx);
+      if (key === 'fidelity') return history.fidelity.slice(0, endIdx);
       return [];
     };
 
@@ -100,11 +123,12 @@ export const CorrelationMatrix: React.FC = () => {
       den2 += d2 * d2;
     }
 
-    if (den1 === 0 || den2 === 0) return { val: baseVal, desc };
+    if (den1 < 1e-12 || den2 < 1e-12) return { val: baseVal, desc };
 
-    const liveR = num / Math.sqrt(den1 * den2);
-    const blended = Number((baseVal * 0.6 + liveR * 0.4).toFixed(2));
-    return { val: Math.max(-1.0, Math.min(1.0, blended)), desc };
+    const rawR = num / Math.sqrt(den1 * den2);
+    const clampedR = Math.max(-1.0, Math.min(1.0, Number(rawR.toFixed(2))));
+    const liveR = Math.abs(clampedR) < 0.005 ? 0.0 : clampedR;
+    return { val: liveR, desc };
   };
 
   const getCellColor = (val: number) => {
@@ -118,7 +142,7 @@ export const CorrelationMatrix: React.FC = () => {
     <div className="w-full hud-panel flex flex-col font-mono text-xs select-text overflow-hidden">
       <div className="hud-header-bar">
         <span>{lang === 'RU' ? "МАТРИЦА КОРРЕЛЯЦИИ ТЕЛЕМЕТРИИ" : "TELEMETRY CORRELATION MATRIX"}</span>
-        <span>{lang === 'RU' ? "[ КОРРЕЛЯЦИЯ ПИРСУНА R ]" : "[ PEARSON R ]"}</span>
+        <span>{lang === 'RU' ? "[ КОРРЕЛЯЦИЯ ПИРСОНА R ]" : "[ PEARSON R ]"}</span>
       </div>
 
       <div className="p-3 grid grid-cols-12 gap-3 items-center flex-1 min-h-0">

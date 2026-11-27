@@ -43,7 +43,7 @@ def test_scheduler_max_coverage_branches():
 
 
 def test_scenarios_all_platform_edge_branches():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
 
     for plat in platforms:
         qpu = VirtualQPU(plat)
@@ -94,7 +94,7 @@ def test_defense_max_coverage_branches():
 
 def test_main_api_all_scenarios_and_defenses_combinations():
     scenarios = ["crosstalk", "rowhammer", "prime_probe", "rf_leakage", "environment"]
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
 
     for plat in platforms:
         for scen in scenarios:

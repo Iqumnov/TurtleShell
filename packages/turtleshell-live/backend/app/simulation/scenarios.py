@@ -1,8 +1,27 @@
 import math
+from collections import deque
 import numpy as np
 import networkx as nx
 from typing import Dict, List, Any
 from .qpu import VirtualQPU
+
+
+def _multi_source_bfs_distances(adj_graph: nx.Graph, sources: List[int]) -> Dict[int, int]:
+    """Exact unweighted multi-source BFS shortest-path distances in O(V + E)."""
+    distances: Dict[int, int] = {}
+    queue: deque = deque()
+    for src in sources:
+        if src in adj_graph and src not in distances:
+            distances[src] = 0
+            queue.append(src)
+    while queue:
+        node = queue.popleft()
+        d_next = distances[node] + 1
+        for nbr in adj_graph.neighbors(node):
+            if nbr not in distances:
+                distances[nbr] = d_next
+                queue.append(nbr)
+    return distances
 
 
 class SimulationScenarios:
@@ -43,7 +62,7 @@ class SimulationScenarios:
         
         if "trapped_ion" in t:
             isolated_fidelity = 0.995
-        elif "tm_optical" in t:
+        elif "sr_optical" in t:
             isolated_fidelity = 0.999
         else:
             isolated_fidelity = 0.94
@@ -60,47 +79,69 @@ class SimulationScenarios:
         
         G = nx.Graph()
         G.add_nodes_from(qpu.qubits.keys())
+        detuned_boundary = False
         for c in qpu.couplers:
-            if c.active:
+            if c.active or (getattr(c, "detuned", False) and c.zz_crosstalk > 0.0):
                 G.add_edge(c.q1, c.q2)
+                if getattr(c, "detuned", False):
+                    detuned_boundary = True
         
         # Multi-source BFS for minimum distance from attacker set to victim set O(V+E)
-        try:
-            if "trapped_ion" in t:
-                # 1D linear ion chain index distance
-                min_dist = min((abs(q0 - q1) for q0 in t0_qubits for q1 in t1_qubits), default=99)
-            else:
-                distances = nx.multi_source_shortest_path_length(G, t1_qubits)
-                min_dist = min((distances[q0] for q0 in t0_qubits if q0 in distances), default=99)
-        except Exception:
-            min_dist = 99
-        
-        # Platform-specific base ZZ coupling & distance scaling
         if "trapped_ion" in t:
-            base_zz = 12.5  # kHz ion trap motional mode crosstalk
-        elif "tm_optical" in t:
-            base_zz = 1.5
-        elif "heron" in t:
-            base_zz = 3.5
+            # 1D linear ion chain index distance
+            min_dist = min((abs(q0 - q1) for q0 in t0_qubits for q1 in t1_qubits), default=99)
         else:
-            base_zz = 6.8  # Eagle
+            distances = _multi_source_bfs_distances(G, t1_qubits)
+            min_dist = min((distances[q0] for q0 in t0_qubits if q0 in distances), default=99)
         
-        if min_dist == 99:
+        # Platform-specific base ZZ coupling derived directly from QPU coupler topology
+        t0_set = set(t0_qubits)
+        t1_set = set(t1_qubits)
+        boundary_zz = [
+            abs(c.zz_base)
+            for c in qpu.couplers
+            if (c.q1 in t0_set and c.q2 in t1_set) or (c.q2 in t0_set and c.q1 in t1_set)
+        ]
+        incident_zz = [
+            abs(c.zz_base)
+            for c in qpu.couplers
+            if c.q1 in t0_set or c.q2 in t0_set or c.q1 in t1_set or c.q2 in t1_set
+        ]
+        if boundary_zz:
+            base_zz = float(np.mean(boundary_zz))
+        elif incident_zz:
+            base_zz = float(np.mean(incident_zz))
+        elif qpu.couplers:
+            base_zz = float(np.mean([abs(c.zz_base) for c in qpu.couplers]))
+        elif "trapped_ion" in t:
+            base_zz = 2.0
+        elif "sr_optical" in t:
+            base_zz = 0.05
+        elif "heron" in t:
+            base_zz = 1.1
+        else:
+            base_zz = 4.8
+
+        # Attenuate by L1 tunable-coupler residual floor when boundary was spectrally detuned
+        atten_factor = qpu.residual_floor if (detuned_boundary and qpu.residual_floor < 1.0) else 1.0
+
+        if min_dist == 99 or atten_factor == 0.0:
             parallel_fidelity = isolated_fidelity
             phase_error = 0.0
             gate_count = 0
         else:
-            gate_count = 500  # Fixed benchmark workload gate depth
-            gate_duration_s = 1.0 / max(100.0, gate_frequency_hz)
-            duration_s = gate_count * gate_duration_s * (intensity / 100.0)
-            
-            effective_zz_khz = base_zz * (0.65 ** max(0, min_dist - 1))
+            freq_factor = max(0.5, min(3.0, gate_frequency_hz / 1e6))
+            gate_count = int(round(500 * freq_factor))  # Fixed-window aggressor pulse count
+            window_s = 100.0e-6 * (intensity / 100.0)
+            duration_s = window_s * freq_factor
+
+            effective_zz_khz = base_zz * atten_factor * (0.65 ** max(0, min_dist - 1))
             zz_hz = effective_zz_khz * 1e3
             phase_error = min(math.pi, 2 * math.pi * zz_hz * duration_s)
-            
-            freq_factor = max(0.5, min(3.0, gate_frequency_hz / 1e6))
-            crosstalk_drop = (0.02 + 0.10 * (0.65 ** max(0, min_dist - 1))) * (intensity / 100.0) * freq_factor
-            parallel_fidelity = max(0.1, isolated_fidelity - min(0.35, crosstalk_drop))
+
+            # Dephasing fidelity loss driven directly by accumulated phase error δφ = 2π J_eff t
+            crosstalk_drop = min(0.35, 0.36 * (1.0 - math.exp(-0.25 * (phase_error ** 2))))
+            parallel_fidelity = max(0.1, isolated_fidelity - crosstalk_drop)
         
         return {
             "isolated_fidelity": round(isolated_fidelity, 4),
@@ -133,34 +174,36 @@ class SimulationScenarios:
         if not t0_qubits or not t1_qubits:
             return {"average_degradation_pct": 0.0, "error_rate_increase": 0.0}
         
-        G = nx.Graph()
-        G.add_nodes_from(qpu.qubits.keys())
-        for c in qpu.couplers:
-            if c.active:
-                G.add_edge(c.q1, c.q2)
-        
-        # Multi-source BFS for minimum distances to all aggressor qubits
-        try:
-            distances = nx.multi_source_shortest_path_length(G, t1_qubits)
-        except Exception:
+        t = qpu.layout_type
+        if "trapped_ion" in t:
             distances = {}
-            
+        else:
+            G = nx.Graph()
+            G.add_nodes_from(qpu.qubits.keys())
+            for c in qpu.couplers:
+                if c.active or (getattr(c, "detuned", False) and c.zz_crosstalk > 0.0):
+                    G.add_edge(c.q1, c.q2)
+
+            # Multi-source BFS for minimum distances to all aggressor qubits O(V+E)
+            distances = _multi_source_bfs_distances(G, t1_qubits)
+
         total_degrad = 0.0
         count = 0
-        
+
         for v_q in t0_qubits:
-            min_dist = distances.get(v_q, 99)
-            
+            if "trapped_ion" in t:
+                min_dist = min((abs(v_q - a_q) for a_q in t1_qubits), default=99)
+            else:
+                min_dist = distances.get(v_q, 99)
+
             if min_dist < 5:
                 dist_factor = 1.0 / (max(1, min_dist) ** 2)
                 load = iterations / 1000.0
-                
-                t = qpu.layout_type
                 if "trapped_ion" in t:
                     # Trapped ions: Rowhammer via phonon excitation coupling
                     # Less severe than superconducting (no shared substrate)
                     degrad = min(0.15, 0.08 * load * dist_factor)
-                elif "tm_optical" in t:
+                elif "sr_optical" in t:
                     # Neutral atoms: virtually immune to Rowhammer
                     degrad = 0.0
                 elif "heron" in t:
@@ -209,17 +252,15 @@ class SimulationScenarios:
         t = qpu.layout_type
         
         if "trapped_ion" in t:
-            # Ion trap model: phonon residual excitation
-            # After priming, n̄ is elevated; it decays back at rate η
-            # n̄(t) = n̄_prime * exp(-η * t)
-            eta = qpu.cooling_rate if qpu.cooling_rate > 0 else 10.0
-            n_bar_prime = 2.0 + qpu.heating_rate * 0.1  # phonons after prime
-            delay_s = delay_us * 1e-6
-            n_bar_residual = n_bar_prime * math.exp(-eta * delay_s)
+            # Ion trap model: transient motional excitation thermalization over µs probe window
+            # After priming, n̄ is elevated and relaxes over optical/sideband thermalization τ ≈ 300 µs
+            n_bar_prime = 2.0 + qpu.heating_rate * 0.1
+            tau_decay_us = 300.0
+            n_bar_residual = n_bar_prime * math.exp(-max(0.0, delay_us) / tau_decay_us)
             
             # Fidelity drop from residual phonons:
-            # F ≈ F0 / (1 + n̄_residual) for Lamb-Dicke regime
-            base_fidelity = 0.92
+            # F ≈ F0 / (1 + 0.3 * n̄_residual) for Lamb-Dicke regime
+            base_fidelity = 0.995
             probe_fidelity = max(0.1, base_fidelity / (1.0 + n_bar_residual * 0.3))
             residual_excitation = round(n_bar_residual, 4)
             
@@ -231,8 +272,8 @@ class SimulationScenarios:
                     float(np.mean([qpu.qubits[q].t1 for q in t0_qubits])), 2
                 ),
             }
-        elif "tm_optical" in t:
-            # Optical lattice: residual excitation is rapidly cleared by optical pumping / state reset (~1 ms)
+        elif "sr_optical" in t:
+            # Optical lattice (87Sr): residual excitation is rapidly cleared by optical pumping / state reset (~1 ms)
             avg_t1 = float(np.mean([qpu.qubits[q].t1 for q in t0_qubits]))
             base_fidelity = 0.94
             initial_excitation = 0.05
@@ -320,8 +361,8 @@ class SimulationScenarios:
         # At SNR=0dB, accuracy ~50%; at SNR=20dB, accuracy ~95%
         decode_accuracy = 1.0 / (1.0 + math.exp(-(snr_db + 5.0) / 5.0))
         
-        # Mutual information (bits per session) — bounded by channel capacity
-        mutual_info = min(channel_capacity, decode_accuracy * math.log2(max(1.0, len(t0_qubits))))
+        # Mutual information (bits per session) — bounded by Shannon channel capacity and gate alphabet
+        mutual_info = min(channel_capacity, decode_accuracy * math.log2(max(2, len(t0_qubits))))
         
         # RF attack severity (0-1): how much info leaked about victim's operations
         rf_severity = decode_accuracy * (1.0 - abs(base_leakage_db) / 120.0)
@@ -351,25 +392,26 @@ class SimulationScenarios:
         
         # Platform-specific baseline operating temperatures
         if "trapped_ion" in t:
-            # Trapped ions: laser-cooled to ~1 µK baseline
-            # Temperature slider provides thermal excitation offset above baseline
+            # Trapped ions: laser-cooled (~1 uK baseline); temperature perturbation shifts
+            # mean thermal phonon occupation smoothly toward equilibrium without unbounded drift.
             delta_temp_mk = max(0.0, temperature_mk - 15.0)
             delta_temp_k = delta_temp_mk * 1e-3
-            
+
             if delta_temp_k > 0:
-                qpu.phonon_number += delta_temp_k * 50.0
+                target_phonon = min(5.0, 0.05 + delta_temp_k * 20.0)
+                qpu.phonon_number = max(qpu.phonon_number, target_phonon)
                 degrad = min(0.35, delta_temp_k * 5.0)
             else:
                 degrad = 0.0
-            
+
             for q in qpu.qubits.values():
                 q.t1 = q.t1_base * (1.0 - degrad)
                 q.t2 = q.t2_base * (1.0 - degrad)
                 
-        elif "tm_optical" in t:
-            # Neutral atoms at 300K room temperature
-            delta_temp_k = max(0.0, (temperature_mk - 15.0) * 1e-3)
-            degrad = min(0.10, delta_temp_k * 2.0)
+        elif "sr_optical" in t:
+            # Neutral atoms (87Sr) are laser-cooled to ~1 uK inside a 300 K UHV glass cell;
+            # dilution-fridge mixing-chamber heating (15 mK -> 100 mK) does not affect them.
+            degrad = 0.0
             for q in qpu.qubits.values():
                 q.t1 = q.t1_base * (1.0 - degrad)
                 q.t2 = q.t2_base * (1.0 - degrad)

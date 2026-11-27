@@ -53,6 +53,7 @@ class Coupler:
         
         # Real-time state
         self.active = True
+        self.detuned = False
         self.zz_crosstalk = zz_base
 
     def to_dict(self) -> Dict[str, Any]:
@@ -60,7 +61,7 @@ class Coupler:
             "q1": self.q1,
             "q2": self.q2,
             "active": self.active,
-            "zz_crosstalk": round(self.zz_crosstalk, 4) if self.active else 0.0
+            "zz_crosstalk": round(self.zz_crosstalk, 4) if (self.active or getattr(self, "detuned", False)) else 0.0
         }
 
 
@@ -70,7 +71,7 @@ class VirtualQPU:
     
     Platforms:
     - trapped_ion_paul_trap: Paul trap ion chain (Ca-40/Sr-88/Ba-138/Yb-171), Linear Paul Trap
-    - tm_optical_lattice: Thulium optical lattice (410.6 nm clock transition, 300K optical lattice)
+    - sr_optical_lattice: Strontium-87 neutral-atom optical lattice (461/689 nm cooling -> ~1 uK atoms, 698.4 nm clock transition at 4.29e14 Hz inside 300K UHV chamber)
     - eagle: IBM Eagle 127Q Heavy-Hex superconducting
     - heron: IBM Heron 133Q superconducting with tunable couplers
     """
@@ -108,8 +109,9 @@ class VirtualQPU:
         
         if "trapped_ion_paul_trap" in t or "trapped_ion" in t:
             self._init_trapped_ion_paul_trap()
-        elif "tm_optical" in t or "optical_lattice" in t:
-            self._init_tm_optical_lattice()
+        elif "sr_optical" in t or "optical_lattice" in t:
+            self.layout_type = "sr_optical_lattice"
+            self._init_sr_optical_lattice()
         elif "heron" in t:
             self._init_ibm_heron()
         elif "eagle" in t:
@@ -156,9 +158,9 @@ class VirtualQPU:
         for i in range(n):
             x = (i - (n - 1) / 2.0) * 1.5
             y = 0.0
-            # Small T1 jitter per ion
-            t1 = float(self._rng.normal(T1_us, T1_us * 0.02))
-            t2 = float(self._rng.normal(T2_us, T2_us * 0.02))
+            # Small T1/T2 jitter per ion, enforcing physical coherence bound T2 <= 2*T1
+            t1 = max(1.0, float(self._rng.normal(T1_us, T1_us * 0.02)))
+            t2 = max(1.0, min(2.0 * t1, float(self._rng.normal(T2_us, T2_us * 0.02))))
             self.qubits[i] = Qubit(i, x, y, t1, t2,
                                    err_1q=1e-4,
                                    err_2q=5e-3,
@@ -174,9 +176,12 @@ class VirtualQPU:
                 zz = float(self._rng.normal(zz, zz * 0.05))  # 5% fabrication disorder
                 self.couplers.append(Coupler(i, j, max(0.001, zz)))
 
-        # Vibrational normal modes: ω_k = ω_axial * sqrt(k), k=1..N
+        # Longitudinal Coulomb crystal normal modes: ω_1 = ω_axial (COM), ω_2 = √3 ω_axial (stretch),
+        # approximated analytically for higher modes via sqrt((k+1)(k+2)/2) (James 1998)
         omega_axial_mhz = 1.0  # 1 MHz axial trap frequency
-        self.vibrational_modes = [omega_axial_mhz * math.sqrt(k + 1) for k in range(n)]
+        self.vibrational_modes = [
+            omega_axial_mhz * math.sqrt((k + 1) * (k + 2) / 2.0) for k in range(n)
+        ]
 
         # Platform physics
         self.heating_rate = sp["heating_rate"]  # phonons/s
@@ -192,11 +197,11 @@ class VirtualQPU:
         self.platform_display_name = f"TrappedIonPaulTrap ({self.ion_species}, N={n})"
         self.platform_description = "Paul trap ion chain, Linear RF Paul Trap (Leibfried et al. 2003)"
 
-    # ─── TmOpticalLattice ────────────────────────────────────────────────────
+    # ─── SrOpticalLattice (87Sr) ─────────────────────────────────────────────
 
-    def _init_tm_optical_lattice(self):
+    def _init_sr_optical_lattice(self):
         """
-        Thulium optical lattice (Sukachev et al. 2014, Saffman et al. 2016).
+        Strontium-87 neutral-atom optical lattice (Boyd et al. 2007, Norcia et al. 2019, Saffman et al. 2016).
         
         Physical parameters from published experimental data:
         - T1 = 60 s = 6e7 µs
@@ -206,9 +211,9 @@ class VirtualQPU:
         - Readout error: 5e-3
         - RF leakage: -80 dBm (very low — neutral atoms)
         - Heating rate: 0 (neutral atoms, no RF trap)
-        - Room temperature operation: 300 K
-        - Clock frequency: 2.63e14 Hz (λ = 1.14 µm)
-        - 2D 10×10 lattice, nearest-neighbor Rydberg connectivity
+        - UHV chamber temperature: 300 K (laser-cooled 87Sr atoms at ~1 µK, 461/689 nm)
+        - Clock frequency: 4.29e14 Hz (1S0 <-> 3P0, λ = 698.4 nm; magic lattice λ = 813 nm)
+        - 2D 10×10 lattice (a = 4.0 µm, blockade radius R_b = 5.2 µm -> 4 nearest neighbors)
         """
         n_side = 10  # 10x10 grid = 100 atoms
         T1_us = 6.0e7   # 60 s in µs
@@ -218,16 +223,16 @@ class VirtualQPU:
         pos_map = {}
         for r in range(n_side):
             for c in range(n_side):
-                t1 = float(self._rng.normal(T1_us, T1_us * 0.01))
-                t2 = float(self._rng.normal(T2_us, T2_us * 0.01))
-                self.qubits[idx] = Qubit(idx, float(c) * 1.5, float(r) * 1.5, t1, t2,
+                t1 = max(1.0, float(self._rng.normal(T1_us, T1_us * 0.01)))
+                t2 = max(1.0, min(2.0 * t1, float(self._rng.normal(T2_us, T2_us * 0.01))))
+                self.qubits[idx] = Qubit(idx, float(c) * 4.0, float(r) * 4.0, t1, t2,
                                          err_1q=1e-4,
                                          err_2q=1e-2,
                                          err_readout=5e-3)
                 pos_map[(r, c)] = idx
                 idx += 1
         
-        # 2D nearest-neighbor Rydberg connectivity
+        # 2D nearest-neighbor Rydberg connectivity (a = 4.0 µm, R_b = 5.2 µm < sqrt(2)*a)
         zz_base = 0.05  # very low crosstalk (neutral atoms)
         for r in range(n_side):
             for c in range(n_side):
@@ -245,18 +250,18 @@ class VirtualQPU:
         
         # Platform physics
         self.heating_rate = 0.0            # Neutral atoms — no RF heating
-        self.phonon_number = 0.0           # No phonon modes relevant
+        self.phonon_number = 0.0           # No collective RF phonon bus
         self.rf_leakage_db = -80.0
-        self.cooling_rate = 0.0            # No laser cooling buffer needed
-        self.temperature_k = 300.0         # Room temperature
-        self.clock_freq_hz = 2.63e14       # 2.63×10^14 Hz (λ = 1.14 µm)
+        self.cooling_rate = 0.0            # No RF phonon cooling buffer needed
+        self.temperature_k = 300.0         # UHV chamber temperature (atoms at ~1 µK)
+        self.clock_freq_hz = 4.29e14       # 4.29×10^14 Hz (λ = 698.4 nm)
         self.vibrational_modes = []
         
         # Rydberg blockade range-selectivity → residual cross-tenant ZZ ≈ 0
         self.residual_floor = 0.0
 
-        self.platform_display_name = "TmOpticalLattice (100 Tm atoms, 2D)"
-        self.platform_description = "Optical lattice neutral atom quantum processor, 2D array (Sukachev et al. 2014)"
+        self.platform_display_name = "SrOpticalLattice (100 87Sr atoms, 2D)"
+        self.platform_description = "Strontium-87 optical lattice neutral-atom processor, 2D array (Boyd et al. 2007, Saffman et al. 2016)"
 
     # ─── IBM Eagle ───────────────────────────────────────────────────────────
 
@@ -283,8 +288,8 @@ class VirtualQPU:
         coord_to_idx = {pos: i for i, pos in enumerate(grid_positions)}
         
         for i, (c, r) in enumerate(grid_positions):
-            t1 = float(self._rng.normal(t1_mean, 12.0))
-            t2 = float(self._rng.normal(t2_mean, 8.0))
+            t1 = max(1.0, float(self._rng.normal(t1_mean, 12.0)))
+            t2 = max(1.0, min(2.0 * t1, float(self._rng.normal(t2_mean, 8.0))))
             self.qubits[i] = Qubit(i, c * 1.5, r * 1.0, t1, t2,
                                     err_1q=1e-3, err_2q=1e-2, err_readout=2e-2)
         
@@ -337,8 +342,8 @@ class VirtualQPU:
         coord_to_idx = {pos: i for i, pos in enumerate(grid_positions)}
         
         for i, (c, r) in enumerate(grid_positions):
-            t1 = float(self._rng.normal(t1_mean, 12.0))
-            t2 = float(self._rng.normal(t2_mean, 8.0))
+            t1 = max(1.0, float(self._rng.normal(t1_mean, 12.0)))
+            t2 = max(1.0, min(2.0 * t1, float(self._rng.normal(t2_mean, 8.0))))
             self.qubits[i] = Qubit(i, c * 1.5, r * 1.0, t1, t2,
                                     err_1q=1e-3, err_2q=7e-3, err_readout=2e-2)
 
@@ -369,11 +374,11 @@ class VirtualQPU:
 
     # ─── Phonon Physics ───────────────────────────────────────────────────────
 
-    def simulate_phonon_heating(self, dt_s: float = 0.1):
+    def simulate_phonon_heating(self, dt_s: float = 0.1, active_cooling: bool = True):
         """
         Simulates phonon number evolution for ion trap platforms.
-        dn̄/dt = ṅ (heating) - η·n̄ (cooling)
-        Steady state: n̄_ss = ṅ/η
+        dn̄/dt = ṅ (heating) - η·n̄ (cooling) when active_cooling is engaged;
+        otherwise passive motional heating dn̄/dt = ṅ bounded by trap depth.
         """
         if "trapped_ion" not in self.layout_type:
             return
@@ -381,25 +386,27 @@ class VirtualQPU:
         eta = self.cooling_rate           # cooling rate 1/s
         n0 = self.phonon_number
         
-        if eta > 0:
+        if active_cooling and eta > 0:
             n_ss = ndot / eta
             # Analytical solution: n̄(t) = n_ss + (n0 - n_ss)*exp(-η*t)
             self.phonon_number = n_ss + (n0 - n_ss) * math.exp(-eta * dt_s)
         else:
-            self.phonon_number = n0 + ndot * dt_s
+            self.phonon_number = min(5.0, n0 + ndot * dt_s)
         
         self.phonon_number = max(0.0, self.phonon_number)
 
-    def reset_all(self):
+    def reset_all(self, reset_phonons: bool = True):
         for q in self.qubits.values():
             q.reset_state()
         for c in self.couplers:
             c.active = True
+            c.detuned = False
             c.zz_crosstalk = c.zz_base
-        if "trapped_ion" in self.layout_type:
-            self.phonon_number = 0.05
-        else:
-            self.phonon_number = 0.0
+        if reset_phonons:
+            if "trapped_ion" in self.layout_type:
+                self.phonon_number = 0.05
+            else:
+                self.phonon_number = 0.0
 
     def compute_isolation_index(
         self,
@@ -412,35 +419,49 @@ class VirtualQPU:
             isolation = 100 × (1 − J_post / J_random)
 
         where:
-          J_random = cross-tenant ZZ sum under random allocation baseline
-          J_post   = cross-tenant ZZ sum under Contour 1 spectral partitioning + detuning
+          J_random = expected cross-tenant ZZ sum under uniform random placement
+          J_post   = realized cross-tenant ZZ sum under current partitioning + L1 detuning
 
-        Returns 100.0% for single-qubit platforms or uncoupled arrays.
+        Returns 100.0% for single-tenant, TDM, or uncoupled arrays.
         """
         if not self.couplers:
             return 100.0
 
         qubit_tenant: Dict[int, int] = {}
+        tenant_sizes = []
         for tenant_id, qids in allocations.items():
+            if qids:
+                tenant_sizes.append(len(qids))
             for qid in qids:
                 qubit_tenant[qid] = tenant_id
 
-        cross_zz_spectral = sum(
-            abs(c.zz_base)
-            for c in self.couplers
-            if qubit_tenant.get(c.q1, -1) != qubit_tenant.get(c.q2, -2)
-        )
-
-        if cross_zz_spectral == 0.0:
+        if len(tenant_sizes) <= 1:
             return 100.0
 
-        # Baseline: total cross-tenant ZZ under unoptimized/random allocation (~1.65× spectral cross-edges)
-        j_random = cross_zz_spectral * 1.65
+        total_assigned = sum(tenant_sizes)
+        if total_assigned <= 1:
+            return 100.0
 
-        if defense_l1_active:
-            j_post = cross_zz_spectral * self.residual_floor
-        else:
-            j_post = cross_zz_spectral
+        active_pool_zz = 0.0
+        cross_zz = 0.0
+        for c in self.couplers:
+            t1 = qubit_tenant.get(c.q1)
+            t2 = qubit_tenant.get(c.q2)
+            if t1 is not None and t2 is not None:
+                w = abs(c.zz_base)
+                active_pool_zz += w
+                if t1 != t2:
+                    cross_zz += w
+
+        if cross_zz == 0.0 or active_pool_zz == 0.0:
+            return 100.0
+
+        # Exact expected fraction of cross-tenant pairs under random qubit assignment
+        same_tenant_pairs = sum(n * (n - 1) for n in tenant_sizes)
+        p_cross_random = 1.0 - (same_tenant_pairs / (total_assigned * (total_assigned - 1)))
+        j_random = active_pool_zz * max(1e-9, p_cross_random)
+
+        j_post = cross_zz * (self.residual_floor if defense_l1_active else 1.0)
 
         isolation = 100.0 * (1.0 - j_post / j_random)
         return round(max(0.0, min(100.0, isolation)), 1)

@@ -12,6 +12,7 @@ def test_qutip_verifier_evolution():
     assert "times_us" in zz_res
     assert "fidelity" in zz_res
     assert len(zz_res["fidelity"]) == 10
+    assert 0.0 <= zz_res["final_fidelity"] <= 1.0
 
     # 2. Contour 3 Cooling verification
     c3_res = verifier.verify_contour3_cooling(
@@ -20,3 +21,6 @@ def test_qutip_verifier_evolution():
     assert "times_s" in c3_res
     assert "n_bar_analytical" in c3_res
     assert len(c3_res["n_bar_analytical"]) == 100
+    if c3_res.get("has_qutip"):
+        assert c3_res["max_abs_error"] is not None
+        assert c3_res["max_abs_error"] < 1e-3

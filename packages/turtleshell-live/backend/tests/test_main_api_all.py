@@ -50,7 +50,7 @@ def test_api_configure_and_state_endpoints():
 
 def test_main_simulation_loop_all_combos():
     from app.main import run_single_simulation_tick
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     scenarios = ["crosstalk", "rowhammer", "prime_probe", "rf_leakage", "environment"]
 
     for plat in platforms:
@@ -67,3 +67,16 @@ def test_main_simulation_loop_all_combos():
             assert "fidelity" in payload
             assert "qpu" in payload
             assert payload["platform_type"] == sim.qpu.layout_type
+
+
+def test_api_configure_rejects_out_of_range_values():
+    """Verify Pydantic bounds reject unphysical or invalid configuration inputs cleanly."""
+    bad_payloads = [
+        {"n_ions": 1},
+        {"utilization": 150.0},
+        {"playback_speed": -1.0},
+        {"crosstalk_intensity": 200.0},
+    ]
+    for bad in bad_payloads:
+        res = client.post("/api/simulation/configure", json=bad)
+        assert res.status_code == 422, f"Expected 422 for {bad}, got {res.status_code}"

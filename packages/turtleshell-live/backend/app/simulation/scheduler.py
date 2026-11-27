@@ -1,4 +1,5 @@
 import random
+import numpy as np
 import networkx as nx
 from typing import List, Dict, Tuple, Set, Any
 from .qpu import VirtualQPU
@@ -11,7 +12,12 @@ class MultiTenantScheduler:
         self._cached_spectral_key: Any = None
         self._cached_spectral_alloc: Any = None
 
-    def execute_allocation(self, algorithm: str, tenant_demands: Dict[int, int]) -> Dict[int, List[int]]:
+    def execute_allocation(
+        self,
+        algorithm: str,
+        tenant_demands: Dict[int, int],
+        defense_l1_active: bool = True,
+    ) -> Dict[int, List[int]]:
         """
         Allocates qubits to tenants based on the selected algorithm.
         tenant_demands: dict mapping tenant_id -> number of qubits required.
@@ -22,9 +28,11 @@ class MultiTenantScheduler:
             q.active_tenant = None
         for c in self.qpu.couplers:
             c.active = True # re-enable all
+            c.detuned = False
+            c.zz_crosstalk = c.zz_base
             
         # Proportionally scale demands to fit inside QPU capacity.
-        # This guarantees every tenant gets at least 1 qubit and the
+        # This guarantees every tenant gets at least 1 qubit when possible and the
         # total never exceeds the number of physical qubits.
         total_q = len(self.qpu.qubits)
         n_tenants = len(tenant_demands)
@@ -35,7 +43,12 @@ class MultiTenantScheduler:
         total_demand = sum(tenant_demands.values())
         adjusted_demands = {}
         
-        if total_demand <= total_q:
+        if n_tenants > total_q:
+            # More tenants than qubits: grant 1 qubit each to top-demand tenants until capacity exhausted
+            ranked = sorted(tenant_demands.items(), key=lambda kv: (-kv[1], kv[0]))
+            for idx, (tid, _) in enumerate(ranked):
+                adjusted_demands[tid] = 1 if idx < total_q else 0
+        elif total_demand <= total_q:
             # Demands fit — use as-is
             for tid, demand in tenant_demands.items():
                 adjusted_demands[tid] = max(1, demand)
@@ -62,7 +75,7 @@ class MultiTenantScheduler:
         algorithm_clean = algorithm.lower().replace("-", "").replace(" ", "").replace("_", "")
         
         if "spectral" in algorithm_clean or "level1" in algorithm_clean or "turtleshell" in algorithm_clean:
-            return self._schedule_spectral_partitioning(adjusted_demands)
+            return self._schedule_spectral_partitioning(adjusted_demands, defense_l1_active=defense_l1_active)
         elif "static" in algorithm_clean:
             return self._schedule_static_partitioning(adjusted_demands)
         elif "timedivision" in algorithm_clean or "tdm" in algorithm_clean:
@@ -128,20 +141,72 @@ class MultiTenantScheduler:
                 allocations[tenant_id] = [] # Queued
         return allocations
 
-    def _schedule_spectral_partitioning(self, tenant_demands: Dict[int, int]) -> Dict[int, List[int]]:
+    def _fiedler_order(self, G: nx.Graph, nodes: List[int]) -> List[int]:
+        """Return nodes ordered by the Fiedler vector v2 of the unnormalized Laplacian L = D - W."""
+        if len(nodes) <= 2:
+            return list(nodes)
+        sub = G.subgraph(nodes)
+        W = nx.to_numpy_array(sub, nodelist=nodes, weight="weight")
+        if not np.any(W > 0):
+            return list(nodes)
+        D = np.diag(W.sum(axis=1))
+        L = D - W
+        try:
+            _, eigvecs = np.linalg.eigh(L)
+            v2 = eigvecs[:, 1]
+            order = np.argsort(v2, kind="stable")
+            return [nodes[int(i)] for i in order]
+        except Exception:
+            return list(nodes)
+
+    def _spectral_bisect_demands(
+        self,
+        G: nx.Graph,
+        node_pool: List[int],
+        demands: List[Tuple[int, int]],
+    ) -> Dict[int, List[int]]:
+        """Recursively bisect nodes along the Fiedler eigenvector matching exact tenant demand sizes."""
+        if not demands:
+            return {}
+        if len(demands) == 1:
+            tid, cap = demands[0]
+            return {tid: list(node_pool[:cap])}
+
+        ordered = self._fiedler_order(G, node_pool)
+        mid = len(demands) // 2
+        left_demands = demands[:mid]
+        right_demands = demands[mid:]
+        left_count = min(len(ordered), sum(cap for _, cap in left_demands))
+
+        left_nodes = ordered[:left_count]
+        right_nodes = ordered[left_count:]
+
+        result = self._spectral_bisect_demands(G, left_nodes, left_demands)
+        result.update(self._spectral_bisect_demands(G, right_nodes, right_demands))
+        return result
+
+    def _schedule_spectral_partitioning(
+        self,
+        tenant_demands: Dict[int, int],
+        defense_l1_active: bool = True,
+    ) -> Dict[int, List[int]]:
         """
         TurtleShell Level 1 Scheduler.
-        Builds coupling graph, runs Louvain/spectral modularity clustering to find
-        strongly-connected, low-crosstalk zones, maps tenants to isolated clusters,
-        and disables boundary couplers.
-        
-        Each qubit is assigned to exactly one tenant — no overwrites.
+        Builds weighted coupling graph (W_ij = |J_zz|), computes exact Fiedler eigenvector
+        v2 of the Graph Laplacian L = D - W (SPECS §5.1.1) for recursive balanced bisection,
+        maps tenants to isolated partitions, and detunes boundary couplers when L1 is active.
         """
         n_tenants = len(tenant_demands)
         if n_tenants == 0:
             return {}
-            
-        cache_key = (self.qpu.layout_type, n_tenants, tuple(sorted(tenant_demands.items())), len(self.qpu.qubits))
+
+        cache_key = (
+            self.qpu.layout_type,
+            n_tenants,
+            tuple(sorted(tenant_demands.items())),
+            len(self.qpu.qubits),
+            defense_l1_active,
+        )
         if self._cached_spectral_key == cache_key and self._cached_spectral_alloc is not None:
             allocations, disabled_pairs = self._cached_spectral_alloc
             for tenant_id, assigned in allocations.items():
@@ -149,106 +214,42 @@ class MultiTenantScheduler:
                     if q_id in self.qpu.qubits:
                         self.qpu.qubits[q_id].active_tenant = tenant_id
             for c in self.qpu.couplers:
-                if (c.q1, c.q2) in disabled_pairs or (c.q2, c.q1) in disabled_pairs:
+                if defense_l1_active and (
+                    (c.q1, c.q2) in disabled_pairs or (c.q2, c.q1) in disabled_pairs
+                ):
                     c.active = False
-                    c.zz_crosstalk = 0.0
-            return allocations
-        
-        # Create networkx graph of couplers
+                    c.detuned = True
+                    c.zz_crosstalk = round(c.zz_base * self.qpu.residual_floor, 6)
+            return {tid: list(qids) for tid, qids in allocations.items()}
+
         G = nx.Graph()
         G.add_nodes_from(self.qpu.qubits.keys())
         for c in self.qpu.couplers:
-            weight = max(0.1, 10.0 - c.zz_base)
-            G.add_edge(c.q1, c.q2, weight=weight)
-            
-        # Run modularity partitioning, requesting at least n_tenants communities
-        # by adjusting resolution parameter upward when needed
-        # Spectral Clustering on Graph Laplacian (SPECS §5.1.1)
-        try:
-            from sklearn.cluster import SpectralClustering
-            adj_matrix = nx.to_numpy_array(G, weight='weight')
-            sc = SpectralClustering(
-                n_clusters=min(n_tenants, len(G.nodes())),
-                affinity='precomputed',
-                assign_labels='kmeans',
-                random_state=42
-            )
-            labels = sc.fit_predict(adj_matrix)
-            
-            nodes = list(G.nodes())
-            comm_dict: Dict[int, Set[int]] = {}
-            for idx, label in enumerate(labels):
-                comm_dict.setdefault(label, set()).add(nodes[idx])
-            communities = list(comm_dict.values())
-            
-            # Ensure we have enough community sets for all tenants
-            while len(communities) < n_tenants:
-                communities = sorted(communities, key=len, reverse=True)
-                largest = list(communities[0])
-                mid = len(largest) // 2
-                if mid == 0:
-                    break
-                communities = [set(largest[:mid]), set(largest[mid:])] + communities[1:]
-        except Exception:
-            from networkx.algorithms.community import louvain_communities
-            communities = list(louvain_communities(G, seed=42, resolution=1.2))
-                
-        # Sort communities by size, descending
-        communities = sorted(communities, key=len, reverse=True)
-        
-        # Build a global pool of unassigned qubits from all communities
-        # Track which qubits have already been assigned
-        assigned_global = set()
-        
-        # Create ordered list of community membership for each qubit
-        qubit_community = {}
-        for comm_idx, comm in enumerate(communities):
-            for q_id in comm:
-                qubit_community[q_id] = comm_idx
-        
-        allocations = {}
-        tenant_list = list(tenant_demands.items())
-        
-        for idx, (tenant_id, num_qubits) in enumerate(tenant_list):
-            assigned = []
-            
-            # Primary community for this tenant
-            comm_idx = idx % len(communities)
-            comm_nodes = [n for n in communities[comm_idx] if n not in assigned_global]
-            
-            # Take up to demand from primary community
-            take = min(num_qubits, len(comm_nodes))
-            assigned = comm_nodes[:take]
-            
-            # If primary community didn't have enough, grab from other communities
-            if len(assigned) < num_qubits:
-                needed = num_qubits - len(assigned)
-                for other_idx in range(len(communities)):
-                    if other_idx == comm_idx:
-                        continue
-                    available = [n for n in communities[other_idx] if n not in assigned_global and n not in assigned]
-                    take_extra = min(needed, len(available))
-                    assigned.extend(available[:take_extra])
-                    needed -= take_extra
-                    if needed <= 0:
-                        break
-                        
-            allocations[tenant_id] = assigned
-            assigned_global.update(assigned)
+            if c.active:
+                G.add_edge(c.q1, c.q2, weight=max(1e-3, abs(c.zz_base)))
+
+        ordered_demands = sorted(tenant_demands.items(), key=lambda kv: (-kv[1], kv[0]))
+        all_nodes = list(self.qpu.qubits.keys())
+        allocations = self._spectral_bisect_demands(G, all_nodes, ordered_demands)
+
+        for tenant_id, assigned in allocations.items():
             for q_id in assigned:
-                self.qpu.qubits[q_id].active_tenant = tenant_id
-                
-        # DISABLE couplers connecting different active tenants (L1 coupler de-tuning)
-        disabled_pairs = set()
-        for c in self.qpu.couplers:
-            t1 = self.qpu.qubits[c.q1].active_tenant
-            t2 = self.qpu.qubits[c.q2].active_tenant
-            if t1 is not None and t2 is not None and t1 != t2:
-                # Disable the boundary coupler
-                c.active = False
-                c.zz_crosstalk = 0.0
-                disabled_pairs.add((c.q1, c.q2))
-                
+                if q_id in self.qpu.qubits:
+                    self.qpu.qubits[q_id].active_tenant = tenant_id
+
+        # Attenuate/detune boundary couplers only when Contour 1 (L1) is active
+        # and hardware supports tunable coupler detuning (residual_floor < 1.0).
+        disabled_pairs: Set[Tuple[int, int]] = set()
+        if defense_l1_active and self.qpu.residual_floor < 1.0:
+            for c in self.qpu.couplers:
+                t1 = self.qpu.qubits[c.q1].active_tenant
+                t2 = self.qpu.qubits[c.q2].active_tenant
+                if t1 is not None and t2 is not None and t1 != t2:
+                    c.active = False
+                    c.detuned = True
+                    c.zz_crosstalk = round(c.zz_base * self.qpu.residual_floor, 6)
+                    disabled_pairs.add((c.q1, c.q2))
+
         self._cached_spectral_key = cache_key
-        self._cached_spectral_alloc = (allocations, disabled_pairs)
-        return allocations
+        self._cached_spectral_alloc = ({tid: list(qids) for tid, qids in allocations.items()}, disabled_pairs)
+        return {tid: list(qids) for tid, qids in allocations.items()}

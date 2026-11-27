@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, QubitState } from '../store/useSimStore';
 import { translations } from '../locales/translations';
 import { getTenantColor } from './Chip3DViewer';
 
@@ -54,8 +54,30 @@ export const BlochSphereArray: React.FC = () => {
 
   // Determine active metrics frame (scrubbed or live)
   const isScrubbing = scrubIndex !== null && history.qpu.length > 0;
-  const activeQpu = isScrubbing ? history.qpu[scrubIndex] : metrics.qpu;
-  const activeStep = isScrubbing ? scrubIndex : tick;
+  const clampedScrub = isScrubbing ? Math.max(0, Math.min(scrubIndex as number, history.qpu.length - 1)) : 0;
+  const activeQpu = isScrubbing ? history.qpu[clampedScrub] : metrics.qpu;
+  const activeStep = isScrubbing ? clampedScrub : tick;
+  const displayFidelity = isScrubbing && history.fidelity[clampedScrub] !== undefined
+    ? history.fidelity[clampedScrub] / 100.0
+    : metrics.fidelity;
+  const baseBenchFidelity = store.qpuType.includes('trapped_ion')
+    ? 0.995
+    : store.qpuType.includes('sr_optical')
+    ? 0.999
+    : 0.94;
+  const displayFidelityDrop = isScrubbing
+    ? Math.max(0.0, (baseBenchFidelity - displayFidelity) * 100.0)
+    : Math.max(0.0, Math.abs(metrics.fidelity_drop ?? 0));
+  const activeQubitsList = activeQpu?.qubits ?? [];
+  const displayAvgT1 = isScrubbing && activeQubitsList.length > 0
+    ? activeQubitsList.reduce((acc, q) => acc + q.t1, 0) / activeQubitsList.length
+    : metrics.average_t1;
+  const displayAvgT2 = isScrubbing && activeQubitsList.length > 0
+    ? activeQubitsList.reduce((acc, q) => acc + q.t2, 0) / activeQubitsList.length
+    : metrics.average_t2;
+  const displayRfDb = isScrubbing && activeQpu?.rf_leakage_db !== undefined
+    ? activeQpu.rf_leakage_db
+    : (metrics.rf_leakage_db ?? -80);
 
   const R = 62;
   const x0 = 80;
@@ -76,28 +98,46 @@ export const BlochSphereArray: React.FC = () => {
   };
 
   const qubits = activeQpu.qubits;
-  
+  if (qubits.length === 0) {
+    return (
+      <div className="w-full text-center text-[var(--text-muted)] font-mono text-xs p-6">
+        AWAITING QUBIT SPIN STATE DATA...
+      </div>
+    );
+  }
+
   const qVictim = qubits.find(q => q.active_tenant === 0) || qubits[0];
   const qAggressor = qubits.find(q => q.active_tenant === 1) || qubits[1] || qubits[0];
   const qNeighbor = qubits.find(q => q.active_tenant === 2) || qubits[2] || qubits[0];
-  const qIdle = qubits.find(q => q.active_tenant === null) || qubits[3] || qubits[0];
+  const freeQubit = qubits.find(q => q.active_tenant === null);
+  const qIdle = freeQubit || qubits[3] || qubits[0];
 
   const t0Label = lang === 'RU' ? 'T0 Жертва' : 'T0 Victim';
   const t1Label = lang === 'RU' ? 'T1 Агрессор' : 'T1 Aggressor';
   const t2Label = lang === 'RU' ? 'T2 Сосед' : 'T2 Neighbor';
   const idleLabel = lang === 'RU' ? 'Свободный' : 'Idle Qubit';
+  const roleLabel = (q: QubitState) =>
+    q.active_tenant === 0 ? t0Label :
+    q.active_tenant === 1 ? t1Label :
+    q.active_tenant === 2 ? t2Label :
+    q.active_tenant !== null ? `T${q.active_tenant}` : idleLabel;
 
   const inspectQubits = [
-    { qRef: qVictim, label: `Q${qVictim.id} ${t0Label}`, isIdle: qVictim.active_tenant === null, color: getTenantColor(qVictim.active_tenant) },
-    { qRef: qAggressor, label: `Q${qAggressor.id} ${t1Label}`, isIdle: qAggressor.active_tenant === null, color: getTenantColor(qAggressor.active_tenant) },
-    { qRef: qNeighbor, label: `Q${qNeighbor.id} ${t2Label}`, isIdle: qNeighbor.active_tenant === null, color: getTenantColor(qNeighbor.active_tenant) },
-    { qRef: qIdle, label: `Q${qIdle.id} ${idleLabel}`, isIdle: true, color: getTenantColor(null) }
+    { qRef: qVictim, label: `Q${qVictim.id} ${roleLabel(qVictim)}`, isIdle: qVictim.active_tenant === null, color: getTenantColor(qVictim.active_tenant) },
+    { qRef: qAggressor, label: `Q${qAggressor.id} ${roleLabel(qAggressor)}`, isIdle: qAggressor.active_tenant === null, color: getTenantColor(qAggressor.active_tenant) },
+    { qRef: qNeighbor, label: `Q${qNeighbor.id} ${roleLabel(qNeighbor)}`, isIdle: qNeighbor.active_tenant === null, color: getTenantColor(qNeighbor.active_tenant) },
+    { qRef: qIdle, label: `Q${qIdle.id} ${roleLabel(qIdle)}`, isIdle: qIdle.active_tenant === null, color: getTenantColor(qIdle.active_tenant) }
   ];
 
-  const threatLevel = metrics.monitor_threat_level ?? 0;
+  const scrubbedZ = isScrubbing ? (history.zScore[clampedScrub] ?? 0) : (metrics.monitor_z_score ?? 0);
+  const scrubbedLoss = isScrubbing ? (history.lossL4[clampedScrub] ?? 0) : (metrics.autoencoder_loss_l4 ?? 0);
+  const threatLevel = isScrubbing
+    ? (scrubbedZ >= 5.25 ? 3 : scrubbedZ >= 3.5 ? 2 : scrubbedZ >= 2.5 ? 1 : 0)
+    : (metrics.monitor_threat_level ?? 0);
+  const isAnomalyL4 = isScrubbing ? (scrubbedLoss > 0.08 || threatLevel >= 2) : metrics.anomaly_flagged_l4;
   const threatLabels = [t.threatLevel0, t.threatLevel1, t.threatLevel2, t.threatLevel3];
-  const threatLabel = threatLevel === 0 && !metrics.anomaly_flagged_l4 ? t.threatLevelNone : (threatLabels[threatLevel] ?? t.threatLevelNone);
-  const cleanThreatLabel = threatLabel.replace(/[^\x00-\x7FА-Яа-яёЁ0-9\s.,!?:;%()'"\-\/\\$^<=>+*#]/g, '');
+  const threatLabel = threatLevel === 0 && !isAnomalyL4 ? t.threatLevelNone : (threatLabels[threatLevel] ?? t.threatLevelNone);
+  const cleanThreatLabel = threatLabel.replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, '');
 
   return (
     <div className="w-full h-[520px] hud-panel p-4 flex flex-row gap-5 font-mono text-xs select-text">
@@ -111,9 +151,11 @@ export const BlochSphereArray: React.FC = () => {
           let mag = 1.0;
 
           if (!iq.isIdle && q) {
-            const theta_phase = (q.gate_count * 0.2) + (activeStep * 0.12);
-            theta = (Math.PI / 4) + (Math.PI / 4) * Math.sin(theta_phase + q.id);
-            mag = 0.72 + 0.25 * Math.cos(activeStep * 0.15 + q.id);
+            const cohRatio = Math.max(0.0, Math.min(1.0, displayFidelity / baseBenchFidelity));
+            const t2Health = q.t1 > 0 ? Math.max(0.15, Math.min(1.0, q.t2 / (1.0 * q.t1))) : 1.0;
+            const theta_phase = (q.gate_count * 0.25) + (activeStep * 0.12);
+            theta = (Math.PI / 4) + (Math.PI / 4) * Math.sin(theta_phase + q.id) * cohRatio;
+            mag = Math.max(0.08, Math.min(1.0, cohRatio * (0.75 + 0.25 * t2Health)));
             phi = q.gate_count * 0.45 + activeStep * 0.18;
           }
 
@@ -166,35 +208,35 @@ export const BlochSphereArray: React.FC = () => {
         <div className="p-2.5 hud-inset flex flex-col gap-1">
           <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.fidelity}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
-            {(metrics.fidelity * 100).toFixed(2)}%
+            {(displayFidelity * 100).toFixed(2)}%
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
           <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.fidelityDrop}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
-            -{Math.max(0, Math.abs(metrics.fidelity_drop ?? 0)).toFixed(2)}%
+            -{displayFidelityDrop.toFixed(2)}%
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
           <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.avgT1}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
-            {fmtTime(metrics.average_t1, lang === 'RU')}
+            {fmtTime(displayAvgT1, lang === 'RU')}
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
           <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.avgT2}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
-            {fmtTime(metrics.average_t2, lang === 'RU')}
+            {fmtTime(displayAvgT2, lang === 'RU')}
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
           <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.rfLeakageDb}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
-            {(metrics.rf_leakage_db ?? -80).toFixed(1)} {lang === 'RU' ? 'дБм' : 'dBm'}
+            {displayRfDb.toFixed(1)} {lang === 'RU' ? 'дБм' : 'dBm'}
           </span>
         </div>
 

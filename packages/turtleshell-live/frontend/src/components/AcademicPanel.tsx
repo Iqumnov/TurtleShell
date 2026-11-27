@@ -15,12 +15,18 @@ export const AcademicPanel: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'zz' | 'c3'>('zz');
 
   const fetchQuTiPVerification = async () => {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (window.location.protocol === 'https:' || (host !== 'localhost' && host !== '127.0.0.1')) {
+        return;
+      }
+    }
     try {
       const res = await fetch(`http://${BACKEND_WS_HOST}/api/qutip/verify`);
       const data = await res.json();
       setQutipData(data);
     } catch (e) {
-      console.error("Failed to run QuTiP solver:", e);
+      // Backend optional in standalone mode
     }
   };
 
@@ -29,14 +35,14 @@ export const AcademicPanel: React.FC = () => {
   }, [store.activeScenario, store.defenseL1, store.defenseL2, store.defenseL3, store.defenseL4, store.qpuType]);
 
   const zzData = qutipData?.zz_crosstalk?.times_us?.map((tVal: number, idx: number) => ({
-    time: tVal.toFixed(2),
-    fidelity: (qutipData.zz_crosstalk.fidelity[idx] * 100).toFixed(2),
+    time: Number(tVal.toFixed(2)),
+    fidelity: Number((qutipData.zz_crosstalk.fidelity[idx] * 100).toFixed(2)),
   })) ?? [];
 
   const c3Data = qutipData?.contour3_cooling?.times_s?.map((tVal: number, idx: number) => ({
-    time: tVal.toFixed(2),
-    numerical: qutipData.contour3_cooling.n_bar_numerical[idx].toFixed(3),
-    analytical: qutipData.contour3_cooling.n_bar_analytical[idx].toFixed(3),
+    time: Number(tVal.toFixed(2)),
+    numerical: Number(qutipData.contour3_cooling.n_bar_numerical[idx].toFixed(3)),
+    analytical: Number(qutipData.contour3_cooling.n_bar_analytical[idx].toFixed(3)),
   })) ?? [];
 
   const renderQuTiPAuditSection = (isRu: boolean) => (
@@ -65,7 +71,7 @@ export const AcademicPanel: React.FC = () => {
         </div>
       </div>
 
-      {qutipData && (
+      {qutipData ? (
         <div className="flex flex-col gap-2 mt-1">
           {activeSubTab === 'zz' ? (
             <>
@@ -142,6 +148,12 @@ export const AcademicPanel: React.FC = () => {
             </>
           )}
         </div>
+      ) : (
+        <div className="text-xs font-mono text-[var(--text-muted)] italic mt-1">
+          {isRu
+            ? "Автономный браузерный режим: для живого численного солвера мастер-уравнения Линдблада (QuTiP) запустите локальный бэкенд (./run_live.sh) или CLI `qib verify-qutip`."
+            : "Standalone browser mode: run the local FastAPI backend (./run_live.sh) or `qib verify-qutip` to stream live QuTiP Lindblad master-equation trajectories."}
+        </div>
       )}
     </div>
   );
@@ -155,7 +167,7 @@ export const AcademicPanel: React.FC = () => {
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Классы квантовых физических платформ:</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>TrappedIonPaulTrap</strong> — линейная ловушка Пауля с ионами Ca-40/Sr-88/Ba-138/Yb-171 (Leibfried et al. 2003, Deslauriers 2006). T1=1с, T2=0.5с, связность all-to-all (J_ij ~ 1/|i-j|³). Угрозы: перекрестные помехи, РЧ-утечка, фононные остатки Prime-and-Probe.</li>
-        <li><strong>TmOpticalLattice</strong> — нейтральные атомы Tm в 2D оптической решётке при 300К (Sukachev et al. 2014, Saffman 2016). T1=60с, T2=30с. Часовой переход 2.63×10¹⁴ Гц. Иммунна к РЧ-атакам.</li>
+        <li><strong>SrOpticalLattice</strong> — нейтральные атомы Стронция-87 (<sup>87</sup>Sr, ~1 мкК в УВВ-камере 300К) в 2D оптической решётке (Boyd et al. 2007, Saffman 2016). T1=60с, T2=30с. Часовой переход 4.29×10¹⁴ Гц (698.4 нм). Иммунна к РЧ-атакам.</li>
         <li><strong>IBM Eagle</strong> — 127-кубитный сверхпроводящий процессор Heavy-Hex. T1≈148мкс, ZZ≈4.8 кГц. Нет управляемых куплеров → Контур 1 не может расстроить граничные связки.</li>
         <li><strong>IBM Heron</strong> — 133-кубитный сверхпроводящий процессор с управляемыми куплерами. T1≈172мкс, ZZ≈1.1 кГц. После расстройки Контура 1 остаточный ZZ ≈ 15%.</li>
       </ul>
@@ -173,7 +185,7 @@ export const AcademicPanel: React.FC = () => {
         <tbody>
           {[
             { name: 'TrappedIonPaulTrap', noise: '0.50%', src: 'err_2q=5e-3 (qpu.py)', tag: '[ МОДОВЫЙ СПЕКТР ]', key: 'trapped_ion' },
-            { name: 'TmOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: '[ БЛОКАДА РИДБЕРГА ]', key: 'tm_optical' },
+            { name: 'SrOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: '[ БЛОКАДА РИДБЕРГА ]', key: 'sr_optical' },
             { name: 'IBM Eagle', noise: '1.00%', src: 'err_2q=1e-2 (qpu.py)', tag: '[ ФИКСИРОВАННЫЕ СВЯЗКИ ]', key: 'eagle' },
             { name: 'IBM Heron', noise: '0.70%', src: 'err_2q=7e-3 (qpu.py)', tag: '[ УПРАВЛЯЕМЫЕ СВЯЗКИ ]', key: 'heron' },
           ].map((row) => {
@@ -181,7 +193,7 @@ export const AcademicPanel: React.FC = () => {
             const isolVal = isActive && store.metrics?.isolation_index !== undefined
               ? `${store.metrics.isolation_index}%`
               : (row.key === 'trapped_ion' ? (store.defenseL1 ? '99.0%' : '52.4%')
-                : row.key === 'tm_optical' ? '100.0%'
+                : row.key === 'sr_optical' ? '100.0%'
                 : row.key === 'eagle' ? '39.4%'  // fixed couplers — L1 cannot improve isolation
                 : row.key === 'heron' ? (store.defenseL1 ? '85.0%' : '44.8%')
                 : '—');
@@ -203,9 +215,9 @@ export const AcademicPanel: React.FC = () => {
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Четыре контура защиты TurtleShell (SPECS §5):</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>Контур 1</strong> — Физическое разделение (Спектральная кластеризация лапласиана графа L = D - |J|) + LMS-фильтр подавления РЧ-утечки (M=32, µ=0.01, сходимость &lt;10мс, подавление 20-30 дБ).</li>
-        <li><strong>Контур 2</strong> — Верификация компилятора: SHA-256 хеш схемы (граф оптимизации + маппинг) + Isolation Forest (n=100, contamination=5%) → порог −0.8.</li>
+        <li><strong>Контур 2</strong> — Верификация компилятора: SHA-256 хеш схемы (граф оптимизации + маппинг) + Isolation Forest (n=100, contamination=5%) → порог −0.6.</li>
         <li><strong>Контур 3</strong> — Буфер лазерного охлаждения: τ_б = (1/η)×ln[(n̄₀−ṅ/η)/(n*−ṅ/η)] для ионных ловушек; адаптивный сброс T1 (5×T1) для СП-систем.</li>
-        <li><strong>Контур 4</strong> — Дифференциальный телеметрический монитор: z-счёт скользящего окна с KS-тестом (df=5 если не Гауссово), уровни угрозы 0-3 при σ∈[2.5; 3.5; 5.25]; синтетическая частота ν_syn = (ν+−ν−)/2 для оптических платформ.</li>
+        <li><strong>Контур 4</strong> — Дифференциальный телеметрический монитор: z-счёт скользящего окна с KS-тестом (df=5 если не Гауссово), уровни угрозы 0-3 при σ∈[2.5; 3.5; 5.25]; синтетическая частота ν_syn = (ν+ + ν−)/2 для оптических платформ.</li>
       </ul>
 
       {renderQuTiPAuditSection(true)}
@@ -224,7 +236,7 @@ export const AcademicPanel: React.FC = () => {
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Quantum Physical Platform Classes:</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>TrappedIonPaulTrap</strong> — Paul trap ion chain with Ca-40/Sr-88/Ba-138/Yb-171 (Leibfried et al. 2003, Deslauriers 2006). T1=1s, T2=0.5s, all-to-all connectivity (J_ij ~ 1/|i-j|³). Threats: Crosstalk, RF leakage side-channel, phonon Prime-and-Probe.</li>
-        <li><strong>TmOpticalLattice</strong> — Thulium neutral atoms in 2D optical lattice at 300K (Sukachev et al. 2014, Saffman 2016). T1=60s, T2=30s. Clock at 2.63×10¹⁴ Hz. Immune to RF leakage attacks.</li>
+        <li><strong>SrOpticalLattice</strong> — Strontium-87 (87Sr) neutral atoms (~1 µK inside 300K UHV chamber) in 2D optical lattice (Boyd et al. 2007, Saffman 2016). T1=60s, T2=30s. Clock at 4.29×10¹⁴ Hz (698.4 nm). Immune to RF leakage attacks.</li>
         <li><strong>IBM Eagle</strong> — 127Q Heavy-Hex superconducting processor. T1≈148µs, ZZ≈4.8kHz. No tunable couplers → Contour 1 cannot detune boundary bonds.</li>
         <li><strong>IBM Heron</strong> — 133Q superconducting with tunable couplers. T1≈172µs, ZZ≈1.1kHz. After Contour 1 spectral detuning, residual ZZ ≈ 15%.</li>
       </ul>
@@ -242,7 +254,7 @@ export const AcademicPanel: React.FC = () => {
         <tbody>
           {[
             { name: 'TrappedIonPaulTrap', noise: '0.50%', src: 'err_2q=5e-3 (qpu.py)', tag: '[ MOTIONAL MODES ]', key: 'trapped_ion' },
-            { name: 'TmOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: '[ RYDBERG BLOCKADE ]', key: 'tm_optical' },
+            { name: 'SrOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: '[ RYDBERG BLOCKADE ]', key: 'sr_optical' },
             { name: 'IBM Eagle', noise: '1.00%', src: 'err_2q=1e-2 (qpu.py)', tag: '[ FIXED COUPLERS ]', key: 'eagle' },
             { name: 'IBM Heron', noise: '0.70%', src: 'err_2q=7e-3 (qpu.py)', tag: '[ TUNABLE COUPLERS ]', key: 'heron' },
           ].map((row) => {
@@ -250,7 +262,7 @@ export const AcademicPanel: React.FC = () => {
             const isolVal = isActive && store.metrics?.isolation_index !== undefined
               ? `${store.metrics.isolation_index}%`
               : (row.key === 'trapped_ion' ? (store.defenseL1 ? '99.0%' : '52.4%')
-                : row.key === 'tm_optical' ? '100.0%'
+                : row.key === 'sr_optical' ? '100.0%'
                 : row.key === 'eagle' ? '39.4%'  // fixed couplers — L1 cannot improve isolation
                 : row.key === 'heron' ? (store.defenseL1 ? '85.0%' : '44.8%')
                 : '—');
@@ -272,9 +284,9 @@ export const AcademicPanel: React.FC = () => {
       <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Four TurtleShell Protection Contours (SPECS §5):</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>Contour 1</strong> — Physical partitioning (Spectral Clustering on Graph Laplacian L = D - |J|) + LMS adaptive filter for RF leakage suppression (M=32, µ=0.01, convergence &lt;10ms, 20-30 dB suppression).</li>
-        <li><strong>Contour 2</strong> — Compiler verification: SHA-256 circuit hash (optimization graph + mapping) + Isolation Forest (n=100, contamination=5%) → threshold −0.8.</li>
-        <li><strong>Contour 3</strong> — Laser cooling buffer: τ_б = (1/η)×ln[(n̄₀−ṅ/η)/(n*−ṅ/η)] for ion traps; adaptive T1 reset (5×T1) for superconducting systems.</li>
-        <li><strong>Contour 4</strong> — Differential telemetry monitor: z-score sliding window with KS-test Gaussianity (Student-t df=5 if non-Gaussian), threat levels 0-3 at σ∈[2.5; 3.5; 5.25]; synthetic frequency ν_syn = (ν+−ν−)/2 for optical lattice platforms.</li>
+        <li><strong>Contour 2</strong> — Compiler verification: SHA-256 circuit hash (optimization graph + mapping) + Isolation Forest (n=100, contamination=5%) → threshold −0.6.</li>
+        <li><strong>Contour 3</strong> — Laser cooling buffer: τ_b = (1/η)×ln[(n̄₀−ṅ/η)/(n*−ṅ/η)] for ion traps; adaptive T1 reset (5×T1) for superconducting systems.</li>
+        <li><strong>Contour 4</strong> — Differential telemetry monitor: z-score sliding window with KS-test Gaussianity (Student-t df=5 if non-Gaussian), threat levels 0-3 at σ∈[2.5; 3.5; 5.25]; synthetic frequency ν_syn = (ν+ + ν−)/2 for optical lattice platforms.</li>
       </ul>
 
       {renderQuTiPAuditSection(false)}

@@ -110,3 +110,57 @@ def test_cli_benchmark():
         assert "Methodology" in content
         
     os.remove(report_file)
+
+
+def test_prime_probe_ion_lower_interference_than_superconducting():
+    """Active optical pumping on trapped ions must yield strictly lower residual interference than SC T1 decay."""
+    from quantum_isolation_benchmark.providers import IonQProvider
+    ibm = IBMProvider(mock=True)
+    ionq = IonQProvider(mock=True)
+
+    res_sc = run_prime_probe_audit(ibm, "ibm_brisbane", [0, 1, 2], delay_us=50.0)
+    res_ion = run_prime_probe_audit(ionq, "ionq_aria", [0, 1, 2], delay_us=50.0)
+
+    assert res_ion["residual_excitation"] < res_sc["residual_excitation"]
+    assert res_ion["reference_fidelity"] > res_sc["reference_fidelity"]
+
+
+def test_all_providers_enforce_t2_coherence_bound():
+    """Verify physical Lindblad coherence limit T2 <= 2*T1 holds across every QIB provider."""
+    from quantum_isolation_benchmark.providers import (
+        IBMProvider,
+        GoogleProvider,
+        AWSBraketProvider,
+        AzureProvider,
+        IonQProvider,
+        GenericSimulatedProvider,
+    )
+
+    cases = [
+        (IBMProvider(mock=True), "ibm_brisbane"),
+        (IBMProvider(mock=True), "ibm_heron"),
+        (GoogleProvider(mock=True), "google_sycamore"),
+        (AWSBraketProvider(mock=True), "aws_braket_rigetti"),
+        (AzureProvider(mock=True), "azure_quantinuum_h1"),
+        (IonQProvider(mock=True), "ionq_aria"),
+        (GenericSimulatedProvider(mock=True), "simulated_hybrid_16q"),
+    ]
+    for prov, backend in cases:
+        prov.connect()
+        cal = prov.get_calibration(backend)
+        for q, t1_val in cal["T1"].items():
+            assert cal["T2"][q] <= 2.0 * t1_val + 1e-9, f"{backend} q={q}: T2={cal['T2'][q]} > 2*T1={2*t1_val}"
+
+
+def test_rf_leakage_report_formatted_cleanly():
+    """Verify RF-Leakage benchmark entries compile cleanly without dumping raw JSON."""
+    runner = CliRunner()
+    report_file = "test_rf_report.md"
+    result = runner.invoke(main, ["benchmark", "--provider", "ionq", "--scenario", "rf_leakage", "--output", report_file])
+    assert result.exit_code == 0
+    with open(report_file, "r", encoding="utf-8") as f:
+        content = f.read()
+    os.remove(report_file)
+    assert "RF-Leakage" in content
+    assert "Shannon mutual information" in content
+    assert '{"scenario":' not in content

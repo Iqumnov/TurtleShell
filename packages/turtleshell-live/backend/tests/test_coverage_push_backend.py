@@ -37,7 +37,7 @@ def test_qpu_adjacency_list():
 
 
 def test_scenarios_remaining_branches():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     for plat in platforms:
         qpu = VirtualQPU(plat)
         alloc = {0: [0, 1], 1: [2, 3]} if len(qpu.qubits) > 3 else {0: [0]}

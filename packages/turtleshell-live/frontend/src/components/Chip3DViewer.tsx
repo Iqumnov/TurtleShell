@@ -37,6 +37,15 @@ function generateStabilizers(qubits: QubitState[], adjList: Map<number, number[]
   const stabilizers: Stabilizer[] = [];
   const visited = new Set<string>();
 
+  // Skip O(V^4) 4-cycle search on dense all-to-all graphs (e.g. trapped ion Paul traps)
+  const isDense = qubits.length > 8 && qubits.some(q => (adjList.get(q.id)?.length ?? 0) > 6);
+  if (isDense) {
+    for (let i = 0; i + 1 < qubits.length; i++) {
+      stabilizers.push({ qubitIds: [qubits[i].id, qubits[i + 1].id], type: 'Z' });
+    }
+    return stabilizers;
+  }
+
   for (const q of qubits) {
     const neighbors = adjList.get(q.id) ?? [];
     for (const n1 of neighbors) {
@@ -244,7 +253,8 @@ export const Chip3DViewer: React.FC = () => {
 
   // Determine active metrics frame (scrubbed or live)
   const isScrubbing = scrubIndex !== null && history.qpu.length > 0;
-  const activeQpu = isScrubbing ? history.qpu[scrubIndex] : metrics.qpu;
+  const clampedScrub = isScrubbing ? Math.max(0, Math.min(scrubIndex as number, history.qpu.length - 1)) : 0;
+  const activeQpu = isScrubbing ? history.qpu[clampedScrub] : metrics.qpu;
 
   const { qubits, couplers } = activeQpu;
   const coordMap = normalizeCoords(qubits, W, H, PAD);
@@ -269,11 +279,13 @@ export const Chip3DViewer: React.FC = () => {
 
   const getQubitBaseT1 = () => {
     const qpu = store.qpuType.toLowerCase();
+    if (qpu.includes("sr_optical") || qpu.includes("optical")) return 6e7;
+    if (qpu.includes("trapped_ion") || qpu.includes("paul")) return 1e6;
     if (qpu.includes("heron")) return 172.0;
     if (qpu.includes("sycamore") || qpu.includes("google")) return 20.0;
     if (qpu.includes("aspen") || qpu.includes("rigetti") || qpu.includes("braket")) return 30.0;
     if (qpu.includes("forte") || qpu.includes("ionq")) return 5e7;
-    if (qpu.includes("simulated") || qpu.includes("ion_trap")) return 5e6;
+    if (qpu.includes("simulated")) return 5e6;
     return 148.0;
   };
 
@@ -307,17 +319,26 @@ export const Chip3DViewer: React.FC = () => {
   };
   // ──────────────────────────────────────────────────────────────────────────
 
-  // Mouse drag and panning handlers
+  // Mouse drag and panning handlers (convert client px delta into SVG viewBox units)
+  const getClientToSvgScale = () => {
+    if (!svgElement) return { sx: 1, sy: 1 };
+    const rect = svgElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { sx: 1, sy: 1 };
+    return { sx: W / rect.width, sy: H / rect.height };
+  };
+
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (e.button !== 0) return;
     setIsDragging(true);
-    setDragStart({ x: e.clientX - viewState.x, y: e.clientY - viewState.y });
+    const { sx, sy } = getClientToSvgScale();
+    setDragStart({ x: e.clientX * sx - viewState.x, y: e.clientY * sy - viewState.y });
   };
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!isDragging) return;
-    const rawX = e.clientX - dragStart.x;
-    const rawY = e.clientY - dragStart.y;
+    const { sx, sy } = getClientToSvgScale();
+    const rawX = e.clientX * sx - dragStart.x;
+    const rawY = e.clientY * sy - dragStart.y;
     const clamped = clampPan(rawX, rawY, viewState.scale);
     setViewState((prev) => ({ ...prev, x: clamped.x, y: clamped.y }));
   };
@@ -426,25 +447,29 @@ export const Chip3DViewer: React.FC = () => {
 
                 let physicalNoise = baseErr1q * 100.0 + baseErrReadout * 10.0;
 
-                // 2. Scenario-specific attack heat elevation (ONLY mitigated by its specific contour)
+                // 2. Scenario-specific attack heat elevation (aligned with backend defense contours)
                 if (!isIdle && isVictim) {
                   if (activeScenario === 'crosstalk') {
-                    // Mitigated ONLY by Contour 1 (Spectral Partitioning)
-                    if (!defenseL1) physicalNoise += 0.85;
+                    if (!defenseL1 && !defenseL2) physicalNoise += 0.85;
+                    else if (!defenseL1 || !defenseL2) physicalNoise += 0.35;
                   } else if (activeScenario === 'rowhammer') {
-                    // Mitigated ONLY by Contour 2 (Compiler Verification)
-                    if (!defenseL2) physicalNoise += 0.90;
+                    // Mitigated ONLY by Contour 3 (Cooling Buffer)
+                    if (!defenseL3) physicalNoise += 0.90;
                   } else if (activeScenario === 'environment') {
-                    // Mitigated ONLY by Contour 3 (Laser Cooling Buffer)
-                    const thermalFactor = Math.max(0.1, phononVal / 0.5);
+                    // Scales with cryostat environment temperature excursion above 15 mK
+                    const thermalFactor = store.qpuType.includes('sr_optical')
+                      ? 0.05
+                      : Math.max(0.1, (store.envTemperatureMk - 12.0) / 18.0 + phononVal * 0.25);
                     if (!defenseL3) physicalNoise += 0.75 * thermalFactor;
                   } else if (activeScenario === 'prime_probe') {
-                    // Mitigated ONLY by Contour 4 (Differential Telemetry Isolation)
-                    if (!defenseL4) physicalNoise += 0.80;
+                    // Mitigated by Contour 3 (Reset) or Contour 4 (Monitoring)
+                    if (!defenseL3 && !defenseL4) physicalNoise += 0.80;
                   } else if (activeScenario === 'rf_leakage') {
-                    // Mitigated ONLY by Contour 1 (LMS Noise Filter)
-                    const rfFactor = Math.max(0.1, (rfLeakage + 60.0) / 30.0);
-                    if (!defenseL1) physicalNoise += 0.70 * rfFactor;
+                    // RF leakage affects trapped-ion RF Paul traps; mitigated by Contour 1 (LMS)
+                    if (store.qpuType.includes('trapped_ion') && !defenseL1) {
+                      const rfFactor = Math.max(0.1, (rfLeakage + 60.0) / 30.0);
+                      physicalNoise += 0.70 * rfFactor;
+                    }
                   }
                 }
 
@@ -738,10 +763,10 @@ export const Chip3DViewer: React.FC = () => {
             type="range"
             min="0"
             max={Math.max(0, history.qpu.length - 1)}
-            value={scrubIndex === null ? history.qpu.length : scrubIndex}
+            value={scrubIndex === null ? Math.max(0, history.qpu.length - 1) : scrubIndex}
             onChange={(e) => {
               const val = parseInt(e.target.value);
-              if (val >= history.qpu.length) {
+              if (val >= history.qpu.length - 1) {
                 store.setScrubIndex(null);
               } else {
                 store.setScrubIndex(val);

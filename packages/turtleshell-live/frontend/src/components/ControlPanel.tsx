@@ -9,6 +9,7 @@ export const ControlPanel: React.FC = () => {
   const t = translations[lang];
 
   const isIonTrap = store.qpuType === 'trapped_ion_paul_trap' || store.qpuType.includes('trapped_ion');
+  const isSrLattice = store.qpuType === 'sr_optical_lattice' || store.qpuType.includes('sr_');
 
   const handleToggleDefense = (level: 1 | 2 | 3 | 4) => {
     if (level === 1) store.setConfigs({ defenseL1: !store.defenseL1 });
@@ -31,7 +32,7 @@ export const ControlPanel: React.FC = () => {
             onChange={(val) => store.setConfigs({ qpuType: val })}
             options={[
               { value: 'trapped_ion_paul_trap', label: t.qpuTrappedIonPaulTrap },
-              { value: 'tm_optical_lattice', label: t.qpuTmOpticalLattice },
+              { value: 'sr_optical_lattice', label: t.qpuSrOpticalLattice },
               { value: 'eagle', label: t.qpuEagle },
               { value: 'heron', label: t.qpuHeron },
             ]}
@@ -217,8 +218,8 @@ export const ControlPanel: React.FC = () => {
             <div className="flex justify-between font-bold text-xs">
               <span className="text-[var(--text-muted)]">{t.cryostatTemp}</span>
               <span className="text-[var(--text-main)] font-mono">
-                {isIonTrap
-                  ? `${(store.envTemperatureMk * 1e-3 * 1000).toFixed(1)} µK`
+                {isSrLattice
+                  ? `~1.0 µK trap / ${store.envTemperatureMk} mK`
                   : `${store.envTemperatureMk} mK`
                 }
               </span>

@@ -10,6 +10,8 @@ except ImportError:
 
 def generate_grover_circuit(qubits: List[int]) -> Any:
     """Generates a simple 3-qubit Grover circuit on the specified qubits."""
+    if len(qubits) < 3:
+        raise ValueError("generate_grover_circuit requires at least 3 qubits")
     if not QISKIT_AVAILABLE:
         return None
     # 3-qubit Grover search for state |111>
@@ -87,7 +89,7 @@ def run_crosstalk_audit(
     # ZZ crosstalk effect calculation:
     # Stronger crosstalk if close, weaker if far (decay is exponential with distance)
     # Intensity multiplier
-    multiplier = {"low": 0.3, "medium": 0.6, "high": 1.0}[intensity]
+    multiplier = {"low": 0.3, "medium": 0.6, "high": 1.0}.get(str(intensity).lower(), 1.0)
     
     # Get mean ZZ crosstalk strength from calibration
     crosstalk_vals = []
@@ -95,16 +97,14 @@ def run_crosstalk_audit(
         q1, q2 = map(int, edge_str.split("_"))
         if q1 in test_qubits or q2 in test_qubits:
             crosstalk_vals.append(val)
-    mean_crosstalk_khz = np.mean(crosstalk_vals) if crosstalk_vals else 4.8
+    mean_crosstalk_khz = float(np.mean(crosstalk_vals)) if crosstalk_vals else 4.8
     
-    # Fidelity drop formula
+    # Fidelity drop formula (attenuate by tunable-coupler floor if tunable Heron/Torino without double-counting calibrated J_zz)
     coupling_factor = mean_crosstalk_khz * (0.5 ** min_dist) * multiplier
-    parallel_fidelity = max(0.1, isolated_fidelity - 0.08 * coupling_factor)
-    
-    # If using tunable couplers (Heron vs Eagle), the crosstalk drops
-    is_heron = "heron" in backend.lower() or "cleveland" in backend.lower()
-    if is_heron:
-        parallel_fidelity = max(parallel_fidelity, isolated_fidelity - 0.015 * coupling_factor)
+    b_lower = backend.lower()
+    is_tunable_heron = "heron" in b_lower or "cleveland" in b_lower or "torino" in b_lower
+    coupler_scale = 0.03 if is_tunable_heron else 0.08
+    parallel_fidelity = max(0.1, isolated_fidelity - coupler_scale * coupling_factor)
         
     return {
         "scenario": "ZZ-Crosstalk",

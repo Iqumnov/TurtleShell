@@ -18,8 +18,8 @@ echo "================================================================"
 echo "  TurtleShell // Unified Verification & Build Pipeline"
 echo "================================================================"
 
-echo "[+] 1. Running quantum-isolation-benchmark test suite..."
-"${VENV_PYTHON}" -m pytest "${ROOT_DIR}/packages/quantum-isolation-benchmark/tests" -v
+echo "[+] 1. Running full pytest suite (benchmark + backend)..."
+"${VENV_PYTHON}" -m pytest "${ROOT_DIR}/packages/quantum-isolation-benchmark/tests" "${ROOT_DIR}/packages/turtleshell-live/backend/tests" -v
 
 echo "[+] 2. Running physical isolation formulas sanity checks..."
 "${VENV_PYTHON}" -c "
@@ -36,11 +36,22 @@ print(f'Contour 3 Laser Cooling Buffer tau_b: {tau_b:.4f} s')
 assert abs(tau_b - 0.6908) < 1e-3, f'Expected 0.6908s, got {tau_b}'
 "
 
-echo "[+] 3. Checking frontend build (if node/npm available)..."
+echo "[+] 3. Checking Lean 4 formal proofs (if lake available)..."
+LAKE_BIN="$(command -v lake || true)"
+if [ -z "${LAKE_BIN}" ] && [ -x "${HOME}/.elan/bin/lake" ]; then
+    LAKE_BIN="${HOME}/.elan/bin/lake"
+fi
+if [ -n "${LAKE_BIN}" ] && [ -d "${ROOT_DIR}/proofs" ]; then
+    (cd "${ROOT_DIR}/proofs" && "${LAKE_BIN}" build)
+else
+    echo "[*] lake not present, skipping Lean 4 proof build."
+fi
+
+echo "[+] 4. Checking frontend build (if node/npm available)..."
 if command -v npm >/dev/null 2>&1 && [ -d "${ROOT_DIR}/packages/turtleshell-live/frontend" ]; then
     cd "${ROOT_DIR}/packages/turtleshell-live/frontend"
     if [ -d "node_modules" ]; then
-        npm run build || true
+        npm run build
     else
         echo "[*] node_modules not present, skipping Vite build."
     fi

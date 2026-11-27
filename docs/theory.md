@@ -11,7 +11,7 @@ $$L = D - |J|$$
 where $D_{ii} = \sum_j |J_{ij}|$. Spectral partitioning computes the Fiedler vector $\mathbf{v}_2$ (the eigenvector corresponding to the second smallest eigenvalue $\lambda_2$ of the Graph Laplacian $L$) to minimize cross-boundary crosstalk coupling subject to zero-sum and unit-norm constraints:
 $$\min_{\substack{\mathbf{x} \perp \mathbf{1} \\ \|\mathbf{x}\| = 1}} \mathbf{x}^T L \mathbf{x} = \frac{1}{2} \sum_{i,j} |J_{ij}| (x_i - x_j)^2$$
 
-* **Implementation**: `backend/app/simulation/scheduler.py` (`MultiTenantScheduler._allocate_spectral`)
+* **Implementation**: `backend/app/simulation/scheduler.py` (`MultiTenantScheduler._schedule_spectral_partitioning`)
 
 ---
 
@@ -42,7 +42,7 @@ $$\tau_b = \frac{1}{\eta} \ln \left( \frac{\bar{n}_0 - \dot{n}/\eta}{n^* - \dot{
 ## 4. Contour 4: Statistical Process Control & Synthetic Frequency (SPECS §5.4)
 
 Synthetic frequency method for optical lattice atomic platforms:
-$$\nu_{\text{syn}} = \frac{\nu_+ - \nu_-}{2}$$
+$$\nu_{\text{syn}} = \frac{\nu_+ + \nu_-}{2}$$
 
 Sliding window Z-score calculation:
 $$Z = \frac{|x - \mu|}{\sigma}$$

@@ -56,14 +56,16 @@ class AWSBraketProvider(QuantumProvider):
             angle = (2 * np.pi * node_in_oct) / 8
             coordinates[idx] = (center_x + np.cos(angle) * oct_radius, center_y + np.sin(angle) * oct_radius)
             
-        # Connect nodes in each octagon in a ring and add bridge couplers
+        # Connect nodes in each octagon/sub-ring in a closed cycle and add bridge couplers
         for idx in qubits:
             oct_idx = idx // 8
             node_in_oct = idx % 8
-            
-            next_node = oct_idx * 8 + ((node_in_oct + 1) % 8)
-            if next_node < n_qubits:
-                edges.append((idx, next_node))
+            ring_size = min(8, n_qubits - oct_idx * 8)
+
+            if ring_size > 1:
+                next_node = oct_idx * 8 + ((node_in_oct + 1) % ring_size)
+                if next_node != idx:
+                    edges.append((idx, next_node))
                 
             # Bridges
             if node_in_oct == 4:
@@ -88,23 +90,23 @@ class AWSBraketProvider(QuantumProvider):
         qubits = topology["qubits"]
         edges = topology["edges"]
         
-        random.seed(backend)
-        np.random.seed(len(backend))
+        import zlib
+        rng = np.random.default_rng(zlib.crc32(backend.encode("utf-8")))
         
         # Superconducting specs similar to Rigetti
-        t1 = {q: max(20.0, float(np.random.normal(30.0, 5.0))) for q in qubits} # ~30 us
-        t2 = {q: max(15.0, float(np.random.normal(25.0, 4.0))) for q in qubits}
+        t1 = {q: max(20.0, float(rng.normal(30.0, 5.0))) for q in qubits} # ~30 us
+        t2 = {q: min(2.0 * t1[q], max(15.0, float(rng.normal(25.0, 4.0)))) for q in qubits}
         
         gate_errors = {}
         for q in qubits:
-            gate_errors[f"rx_{q}"] = max(0.001, float(np.random.normal(0.002, 0.0003)))
-            gate_errors[f"readout_{q}"] = max(0.02, float(np.random.normal(0.035, 0.005)))
+            gate_errors[f"rx_{q}"] = max(0.001, float(rng.normal(0.002, 0.0003)))
+            gate_errors[f"readout_{q}"] = max(0.02, float(rng.normal(0.035, 0.005)))
             
         crosstalk = {}
         for edge in edges:
-            gate_errors[f"cz_{edge[0]}_{edge[1]}"] = max(0.01, float(np.random.normal(0.018, 0.002)))
+            gate_errors[f"cz_{edge[0]}_{edge[1]}"] = max(0.01, float(rng.normal(0.018, 0.002)))
             # Rigetti has about 3.5 kHz crosstalk
-            crosstalk[f"{edge[0]}_{edge[1]}"] = max(0.5, float(np.random.normal(3.5, 0.4)))
+            crosstalk[f"{edge[0]}_{edge[1]}"] = max(0.5, float(rng.normal(3.5, 0.4)))
             
         return {
             "T1": t1,
@@ -114,7 +116,11 @@ class AWSBraketProvider(QuantumProvider):
         }
 
     def execute_circuits(self, backend: str, circuits: List[Any], shots: int = 1000) -> List[Dict[str, int]]:
-        return [{"00": shots // 2, "11": shots // 2} for _ in circuits]
+        if not self.mock and not BRAKET_AVAILABLE:
+            raise RuntimeError("AWS Braket live execution requires amazon-braket-sdk and AWS credentials.")
+        return [{"00": shots // 2, "11": shots - shots // 2} for _ in circuits]
 
     def execute_parallel(self, backend: str, circuits_with_qubits: List[Tuple[Any, List[int]]], shots: int = 1000) -> List[Dict[str, int]]:
-        return [{"00": shots // 2, "11": shots // 2} for _ in circuits_with_qubits]
+        if not self.mock and not BRAKET_AVAILABLE:
+            raise RuntimeError("AWS Braket live execution requires amazon-braket-sdk and AWS credentials.")
+        return [{"00": shots // 2, "11": shots - shots // 2} for _ in circuits_with_qubits]

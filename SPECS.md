@@ -73,31 +73,31 @@ TurtleShell implements a **four-contour defense architecture** designed to guara
 - **Connectivity**: All-to-all via collective motional phonon bus modes.
 - **Physical Baseline Parameters**:
   - Single-qubit gate time: $t_{1q} = 10\,\mu\text{s}$; Two-qubit gate time (Mølmer-Sørensen): $t_{2q} = 50\,\mu\text{s}$.
-  - Single-qubit error rate: $\epsilon_{1q} \approx 1.0 \times 10^{-4}$; Two-qubit error rate: $\epsilon_{2q} \approx 3.0 \times 10^{-3}$.
-  - Coherence: $T_1 = 1.16\,\text{s}$, $T_2^* = 0.5\,\text{s}$.
-  - Anomalous motional heating rate: $\dot{n} \approx 2.0\,\text{phonons/s}$.
-  - Doppler laser cooling rate: $\eta \approx 10.0\,\text{s}^{-1}$.
+  - Single-qubit error rate: $\epsilon_{1q} \approx 1.0 \times 10^{-4}$; Two-qubit error rate: $\epsilon_{2q} \approx 5.0 \times 10^{-3}$; Readout error: $\epsilon_{\text{ro}} \approx 1.0 \times 10^{-3}$.
+  - Coherence: $T_1 = 1.0\,\text{s}$, $T_2^* = 0.5\,\text{s}$.
+  - Anomalous motional heating rate: $\dot{n} \approx 0.02\text{--}0.1\,\text{phonons/s}$ (species-dependent: $^{40}\text{Ca}^+ = 0.1$, $^{88}\text{Sr}^+ = 0.05$, $^{138}\text{Ba}^+ = 0.02$, $^{171}\text{Yb}^+ = 0.08$).
+  - Doppler laser cooling rate: $\eta \approx 8.0\text{--}12.0\,\text{s}^{-1}$.
 
-### 3.2 Neutral Atom Optical Lattice (`tm_optical_lattice`)
-- **Physical Species**: $^{87}\text{Sr}$ atoms in a 2D optical dipole lattice.
-- **Qubit Mapping**: Nuclear spin states ($I = 9/2$) in the $^1S_0$ ground state or Rydberg states ($n \approx 70$) for fast two-qubit entanglement.
-- **Interaction Mechanism**: Rydberg blockade with interaction potential $V(r) = C_6 / r^6$.
+### 3.2 Neutral Atom Optical Lattice (`sr_optical_lattice`)
+- **Physical Species**: Laser-cooled $^{87}\text{Sr}$ atoms (~$1\,\mu\text{K}$) in a 2D optical dipole lattice inside a $300\,\text{K}$ UHV chamber (magic wavelength $\lambda_{\text{magic}} \approx 813\,\text{nm}$, clock transition $^1S_0 \leftrightarrow {}^3P_0$ at $698.4\,\text{nm}$, $\nu_0 \approx 4.29 \times 10^{14}\,\text{Hz}$).
+- **Qubit Mapping**: Nuclear spin states ($I = 9/2$) in the $^1S_0$ ground state and Rydberg states ($n \approx 70$) for fast two-qubit entanglement.
+- **Interaction Mechanism**: Rydberg blockade with van der Waals potential $V(r) = C_6 / r^6$.
 - **Physical Baseline Parameters**:
-  - Lattice spacing: $a = 4.0\,\mu\text{m}$; Blockade radius: $R_b \approx 8.5\,\mu\text{m}$.
-  - Single-qubit error: $\epsilon_{1q} \approx 2.0 \times 10^{-4}$; Two-qubit error: $\epsilon_{2q} \approx 5.0 \times 10^{-3}$.
+  - Lattice spacing: $a = 4.0\,\mu\text{m}$; Blockade radius: $R_b \approx 5.2\,\mu\text{m}$ ($a < R_b < \sqrt{2}a$, enforcing 4-nearest-neighbor coupling).
+  - Single-qubit error: $\epsilon_{1q} \approx 1.0 \times 10^{-4}$; Two-qubit error: $\epsilon_{2q} \approx 1.0 \times 10^{-2}$; Readout error: $\epsilon_{\text{ro}} \approx 5.0 \times 10^{-3}$.
   - Coherence: $T_1 = 60.0\,\text{s}$, $T_2^* = 30.0\,\text{s}$.
-  - Synthetic frequency drift cancellation: $\nu_{\text{syn}} = \frac{\nu_+ - \nu_-}{2}$.
+  - Linear Zeeman shift cancellation via synthetic frequency: $\nu_{\text{syn}} = \frac{\nu_+ + \nu_-}{2}$.
 
 ### 3.3 Superconducting Transmons: Fixed Couplers (`eagle`)
 - **Architecture**: IBM Eagle 127-qubit Heavy-Hexagonal lattice with fixed transmon-transmon capacitive coupling.
 - **Two-Qubit Gating**: Cross-Resonance (CR) driving.
 - **Crosstalk Hamiltonian**:
   $$H_{\text{int}} = \sum_{\langle i, j \rangle} \frac{J_{ij}}{2} (\sigma_i^x \sigma_j^x + \sigma_i^y \sigma_j^y) + \sum_{\langle i, j \rangle} \frac{\zeta_{ij}}{4} \sigma_i^z \sigma_j^z$$
-- **Parameters**: $T_1 \approx 148\,\mu\text{s}$, $T_2 \approx 96\,\mu\text{s}$, static $ZZ$-crosstalk $\zeta \approx 80–120\,\text{kHz}$.
+- **Parameters**: $T_1 \approx 148\,\mu\text{s}$, $T_2 \approx 96\,\mu\text{s}$, static $ZZ$-crosstalk $\zeta \approx 4.8\,\text{kHz}$.
 
 ### 3.4 Superconducting Transmons: Tunable Couplers (`heron`)
 - **Architecture**: IBM Heron 133-qubit Heavy-Hexagonal lattice with active SQUID-based tunable couplers.
-- **Parameters**: $T_1 \approx 172\,\mu\text{s}$, $T_2 \approx 110\,\mu\text{s}$, dynamic on/off coupling ratio $> 1000$, residual $\zeta \le 5\,\text{kHz}$.
+- **Parameters**: $T_1 \approx 172\,\mu\text{s}$, $T_2 \approx 115\,\mu\text{s}$, dynamic on/off coupling ratio $> 1000$, baseline $\zeta \approx 1.1\,\text{kHz}$ ($\sim 15\%$ residual under Contour 1 detuning).
 
 ---
 
@@ -139,9 +139,9 @@ where $\mu = 0.01$ is the adaptation rate.
 To prevent untrusted compilation or rogue circuit modification, circuits submitted to the quantum execution pipeline are sealed with SHA-256 hashes:
 $$H_C = \text{SHA256}(\text{QASM} \parallel \text{Parameters})$$
 
-Before scheduling, an unsupervised **Isolation Forest** model evaluates a feature vector $\mathbf{f}_C$ extracted from the intermediate representation:
-$$\mathbf{f}_C = [N_{\text{qubits}}, N_{1q}, N_{2q}, \text{Depth}, \text{Density}_{2q}, \text{RepetitionFactor}]$$
-Circuits exhibiting anomaly scores exceeding threshold $\tau_{\text{iso}} = 0.65$ (indicative of pulse Rowhammer or trojan padding) are quarantined and aborted.
+Before scheduling, an unsupervised **Isolation Forest** model evaluates a 4-dimensional feature vector $\mathbf{f}_C$ extracted from the intermediate representation:
+$$\mathbf{f}_C = [N_{\text{swaps}}, \text{Depth}, \rho_{\text{CZ}}, T_{\text{pulse}}]$$
+Circuits failing hash verification or inlier classification (`score <= -0.6`) are quarantined and aborted.
 
 ### 5.3 Contour 3: Analytical Laser Cooling Buffer & Thermal Quenching
 Residual phonon occupancy in linear trapped-ion arrays decays under active Doppler laser cooling according to the differential equation:
@@ -155,24 +155,24 @@ Contour 3 computes $\tau_b$ dynamically at tenant batch transitions and inserts 
 
 ### 5.4 Contour 4: Differential Statistical Process Control & Deep Autoencoders
 Contour 4 continuously samples environmental and calibration telemetry:
-- **Differential Monitor**: Computes synthetic frequency differences $\nu_{\text{syn}} = (\nu_+ - \nu_-) / 2$ and sliding-window $Z$-scores:
+- **Differential Monitor**: Computes linear-Zeeman-free synthetic frequency $\nu_{\text{syn}} = (\nu_+ + \nu_-) / 2$ and sliding-window $Z$-scores:
   $$Z = \frac{|x - \mu|}{\sigma}$$
   To prevent false positives from non-Gaussian noise, a Kolmogorov-Smirnov test dynamically selects between Gaussian $3.5\sigma$ and Student-$t$ distribution ($\text{df} = 5$, threshold $Z_{\text{crit}} \approx 6.87$) criteria.
-- **Deep Telemetry Autoencoder**: An undercomplete neural network maps multi-sensor vectors into a low-dimensional bottleneck ($d = 4$) and evaluates mean squared reconstruction error:
-  $$\mathcal{L}(x, \hat{x}) = \| x - \text{Dec}(\text{Enc}(x)) \|_2^2$$
-  Reconstruction deviations exceeding the $99.5^{\text{th}}$ percentile trigger immediate security interrupts.
+- **Subspace Telemetry Autoencoder**: `StandardScaler` + 4-component `PCA` projects 16-dimensional telemetry vectors into a low-dimensional subspace ($d = 4$) and evaluates mean squared reconstruction error:
+  $$\mathcal{L}(\tilde{\mathbf{x}}, \hat{\mathbf{x}}) = \frac{1}{16} \|\tilde{\mathbf{x}} - \hat{\mathbf{x}}\|_2^2$$
+  Reconstruction deviations exceeding the $95^{\text{th}}$ percentile baseline threshold trigger immediate security interrupts.
 
 ---
 
 ## 6. Metrics & Financial Evaluation
 
-1. **Process Fidelity**:
+1. **Quantum State Fidelity (Uhlmann–Jozsa)**:
    $$F(\rho, \sigma) = \left( \text{Tr} \sqrt{\sqrt{\rho}\sigma\sqrt{\rho}} \right)^2$$
 2. **Normalized Isolation Index**:
-   $$I_{\text{iso}} = 1 - \frac{\text{Leakage}_{\text{active}}}{\text{Leakage}_{\text{unmitigated}}} \in [0, 1]$$
+   $$I_{\text{iso}} = 100 \left( 1 - \frac{J_{\text{post}}}{J_{\text{random}}} \right) \in [0, 100]\%$$
 3. **Financial ROI & Net SLA Benefit**:
-   $$\text{Gross Savings} = \sum_{t} C_{\text{hourly}} \cdot U \cdot \Delta F_{\text{preserved}}$$
-   $$\text{Net Benefit} = \text{Gross Savings} - C_{\text{buffer\_overhead}}$$
+   $$\text{Gross Savings} = \sum_{t} 2.5 \cdot C_{\text{step}} \cdot \Delta F_{\text{recovered}}, \qquad C_{\text{step}} = \frac{C_{\text{hourly}} \cdot U}{360}$$
+   $$\text{Net Benefit} = \text{Gross Savings} - C_{\text{defense\_overhead}}$$
 
 ---
 

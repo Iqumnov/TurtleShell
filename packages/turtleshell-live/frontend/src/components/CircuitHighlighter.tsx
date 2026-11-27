@@ -13,6 +13,7 @@ interface CodeLine {
 export const CircuitHighlighter: React.FC = () => {
   const store = useSimStore();
   const activeScenario = store.activeScenario;
+  const defenseL1 = store.defenseL1;
   const defenseL2 = store.defenseL2;
 
   const lang = store.language;
@@ -32,11 +33,11 @@ export const CircuitHighlighter: React.FC = () => {
             {
               lineNum: 6,
               code: `cz q[1], q[2]; // ${t.qasmTenantAggressor}`,
-              isVulnerable: !defenseL2,
-              isMitigated: defenseL2,
-              comment: !defenseL2 ? t.qasmVulnCrosstalk : t.qasmMitigatedCrosstalk,
+              isVulnerable: !defenseL1,
+              isMitigated: defenseL1,
+              comment: !defenseL1 ? t.qasmVulnCrosstalk : t.qasmMitigatedCrosstalk,
             },
-            { lineNum: 7, code: `rz(0.5) q[0]; // ${t.qasmPhaseError}`, isVulnerable: !defenseL2, isMitigated: defenseL2 },
+            { lineNum: 7, code: `rz(0.5) q[0]; // ${t.qasmPhaseError}`, isVulnerable: !defenseL1, isMitigated: defenseL1 },
             { lineNum: 8, code: "measure q[0] -> c[0];", isVulnerable: false, isMitigated: false },
           ],
         };
@@ -137,7 +138,7 @@ export const CircuitHighlighter: React.FC = () => {
       return {
         label: isRu ? "КОНТУР 3: БУФЕР ЛАЗЕРНОГО ОХЛАЖДЕНИЯ" : "CONTOUR 3: LASER COOLING BUFFER",
         text: active
-          ? (isRu ? "Контур 3 активен: Буфер лазерного охлаждения τ_б вставлен в схему. Тепловой резонанс и сбои когерентности T1/T2 предотвращены." : "Contour 3 active: Laser cooling buffer τ_б inserted into schedule. Thermal resonance and T1/T2 degradation prevented.")
+          ? (isRu ? "Контур 3 активен: Буфер лазерного охлаждения τ_б вставлен в схему. Тепловой резонанс и сбои когерентности T1/T2 предотвращены." : "Contour 3 active: Laser cooling buffer τ_b inserted into schedule. Thermal resonance and T1/T2 degradation prevented.")
           : (isRu ? "Буфер охлаждения отключен: Циклическая активация шины вызовет термический Rowhammer. Включите Контур 3 для защиты." : "Cooling buffer disabled: Cyclical bus excitation will cause thermal Rowhammer. Enable Contour 3 to protect coherence.")
       };
     }

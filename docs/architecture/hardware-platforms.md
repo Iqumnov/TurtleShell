@@ -8,10 +8,10 @@ TurtleShell models four canonical, widely-adopted quantum hardware platforms wit
 
 | Platform ID | Architecture | Physical Species | Qubit Count | Connectivity | Coherence ($T_1 / T_2$) | Error Rates ($\epsilon_{1q} / \epsilon_{2q}$) |
 |---|---|---|---|---|---|---|
-| `trapped_ion_paul_trap` | Linear RF Paul Trap | $^{40}\text{Ca}^+$ | 20–50 | All-to-All (Phonon Bus) | $1.16\,\text{s} / 0.5\,\text{s}$ | $1.0 \times 10^{-4} / 3.0 \times 10^{-3}$ |
-| `tm_optical_lattice` | 2D Optical Lattice | $^{87}\text{Sr}$ | 100 | Nearest-Neighbor (Rydberg) | $60.0\,\text{s} / 30.0\,\text{s}$ | $2.0 \times 10^{-4} / 5.0 \times 10^{-3}$ |
-| `eagle` | Superconducting Transmon | Niobium / Al-AlOx | 127 | Heavy-Hex (Fixed Couplers) | $148\,\mu\text{s} / 96\,\mu\text{s}$ | $5.0 \times 10^{-4} / 1.0 \times 10^{-2}$ |
-| `heron` | Superconducting Transmon | Niobium / Al-AlOx | 133 | Heavy-Hex (Tunable Couplers) | $172\,\mu\text{s} / 110\,\mu\text{s}$ | $3.0 \times 10^{-4} / 7.0 \times 10^{-3}$ |
+| `trapped_ion_paul_trap` | Linear RF Paul Trap | $^{40}\text{Ca}^+$ | 20–50 | All-to-All (Phonon Bus) | $1.0\,\text{s} / 0.5\,\text{s}$ | $1.0 \times 10^{-4} / 5.0 \times 10^{-3}$ |
+| `sr_optical_lattice` | 2D Optical Lattice | $^{87}\text{Sr}$ (~$1\,\mu\text{K}$ in $300\,\text{K}$ UHV) | 100 | Nearest-Neighbor (Rydberg, $a=4\,\mu\text{m}, R_b=5.2\,\mu\text{m}$) | $60.0\,\text{s} / 30.0\,\text{s}$ | $1.0 \times 10^{-4} / 1.0 \times 10^{-2}$ |
+| `eagle` | Superconducting Transmon | Niobium / Al-AlOx | 127 | Heavy-Hex (Fixed Couplers) | $148\,\mu\text{s} / 96\,\mu\text{s}$ | $1.0 \times 10^{-3} / 1.0 \times 10^{-2}$ |
+| `heron` | Superconducting Transmon | Niobium / Al-AlOx | 133 | Heavy-Hex (Tunable Couplers) | $172\,\mu\text{s} / 115\,\mu\text{s}$ | $1.0 \times 10^{-3} / 7.0 \times 10^{-3}$ |
 
 ---
 
@@ -26,9 +26,9 @@ TurtleShell's platform classes map directly to the primary hardware technologies
 - **Physical Implementation**: Rack-mounted 19-inch trapped-ion quantum computer utilizing optical transitions in $^{40}\text{Ca}^+$ ions, identical to TurtleShell's `trapped_ion_paul_trap` calibration.
 - **Threat Vector**: Collective motional bus phonon excitations and stray RF drive cross-talk. TurtleShell's Contour 1 (LMS filtering) and Contour 3 (laser cooling buffer $\tau_b$) directly safeguard AQT-style trapped-ion cloud systems.
 
-### 2.2 PASQAL (France / EU) -> `tm_optical_lattice`
-- **EuroHPC Context**: Procured by EuroHPC JU for EuroQCS-France (GENCI / CEA) and EuroQCS-Germany (Forschungszentrum Jülich) for hybrid HPC-QC acceleration.
-- **Physical Implementation**: Neutral atom arrays trapped in optical tweezers with Rydberg blockade interactions, modeled by TurtleShell's `tm_optical_lattice`.
+### 2.2 Neutral Atom Optical Lattice (PASQAL / EuroHPC Class) -> `sr_optical_lattice`
+- **EuroHPC Context**: Neutral-atom arrays procured by EuroHPC JU for EuroQCS-France (GENCI / CEA) and EuroQCS-Germany (Forschungszentrum Jülich) for hybrid HPC-QC acceleration.
+- **Physical Implementation**: Laser-cooled $^{87}\text{Sr}$ neutral atom array trapped in an optical lattice / tweezer geometry with Rydberg blockade interactions ($a = 4.0\,\mu\text{m}$, $R_b = 5.2\,\mu\text{m}$), modeled by TurtleShell's `sr_optical_lattice`.
 - **Threat Vector**: Optical cross-talk, Rydberg dipole-dipole parasitic shifts, and thermal laser drift. Addressed by TurtleShell's Contour 4 synthetic frequency drift cancellation ($\nu_{\text{syn}}$).
 
 ### 2.3 IQM Quantum Computers (Finland / Germany / EU) -> `heron` / Superconducting

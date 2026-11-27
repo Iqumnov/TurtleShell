@@ -4,7 +4,7 @@ from app.simulation.scenarios import SimulationScenarios
 
 
 def test_run_crosstalk_all_platforms():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     for plat in platforms:
         qpu = VirtualQPU(plat)
         alloc = {0: [0], 1: [1]} if len(qpu.qubits) > 1 else {0: [0]}
@@ -18,7 +18,7 @@ def test_run_crosstalk_all_platforms():
 
 
 def test_run_rowhammer_all_platforms():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     for plat in platforms:
         qpu = VirtualQPU(plat)
         alloc = {0: [0, 1], 1: [2, 3]} if len(qpu.qubits) > 3 else {0: [0]}
@@ -29,7 +29,7 @@ def test_run_rowhammer_all_platforms():
 
 
 def test_run_prime_probe_all_platforms():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     for plat in platforms:
         qpu = VirtualQPU(plat)
         alloc = {0: [0, 1], 1: [2, 3]} if len(qpu.qubits) > 3 else {0: [0]}
@@ -41,7 +41,7 @@ def test_run_prime_probe_all_platforms():
 
 
 def test_run_rf_leakage_all_platforms():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     for plat in platforms:
         qpu = VirtualQPU(plat)
         alloc = {0: [0, 1], 1: [2, 3]} if len(qpu.qubits) > 3 else {0: [0]}
@@ -54,7 +54,7 @@ def test_run_rf_leakage_all_platforms():
 
 
 def test_run_decoherence_all_platforms():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     for plat in platforms:
         qpu = VirtualQPU(plat)
         qpu.qubits[0].active_tenant = 0

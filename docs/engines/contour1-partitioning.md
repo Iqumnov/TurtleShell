@@ -52,6 +52,6 @@ where:
 - $\mu = 0.01$: step size parameter guaranteeing asymptotic convergence without gradient divergence.
 
 ### 2.2 Performance Metrics
-- **Suppression Ratio**: $20–30\,\text{dB}$ attenuation of stray RF sidebands.
-- **Convergence Time**: $< 10\,\mu\text{s}$, well within typical transmon drive pulse flat-top durations.
+- **Suppression Ratio**: $20\text{--}30\,\text{dB}$ attenuation of stray RF sidebands.
+- **Convergence Time**: $< 10\,\text{ms}$ nominal RF tracking budget (benchmarked in $120 \times 1.35\,\mu\text{s} \approx 162\,\mu\text{s}$ simulated adaptation).
 

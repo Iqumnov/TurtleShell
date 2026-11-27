@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantum-isolation-benchmark"
-version = "0.1.0"
+version = "1.0.0"
 description = "A benchmarking framework to audit process isolation in quantum clouds"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,15 +21,21 @@ dependencies = [
     "click>=8.0.0",
     "numpy>=1.24.0",
     "scipy>=1.10.0",
-    "pandas>=2.0.0",
+    "scikit-learn>=1.2.0",
     "networkx>=3.0",
-    "matplotlib>=3.7.0",
     "qiskit>=1.0.0",
-    "qiskit-aer>=0.14.0",
-    "requests>=2.28.0"
+    "qiskit-aer>=0.14.0"
 ]
 
 [project.optional-dependencies]
+viz = [
+    "pandas>=2.0.0",
+    "matplotlib>=3.7.0",
+    "requests>=2.28.0"
+]
+verification = [
+    "qutip>=5.0.0"
+]
 dev = [
     "pytest>=7.0.0",
     "hypothesis>=6.0.0",

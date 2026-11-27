@@ -20,23 +20,31 @@ def test_scheduler_allocations_uniqueness_and_capacity():
 
 
 def test_scheduler_spectral_disables_boundary_couplers():
-    qpu = VirtualQPU("eagle")
-    scheduler = MultiTenantScheduler(qpu)
-    demands = {0: 20, 1: 20}
+    # Tunable-coupler Heron can detune boundary bonds down to residual_floor (15%)
+    qpu_heron = VirtualQPU("heron")
+    scheduler_h = MultiTenantScheduler(qpu_heron)
+    scheduler_h.execute_allocation("spectral", {0: 20, 1: 20})
 
-    alloc = scheduler.execute_allocation("spectral", demands)
-
-    # Boundary couplers connecting tenant 0 and tenant 1 must be disabled (active=False, zz_crosstalk=0)
-    boundary_couplers = []
-    for c in qpu.couplers:
-        t1 = qpu.qubits[c.q1].active_tenant
-        t2 = qpu.qubits[c.q2].active_tenant
-        if t1 is not None and t2 is not None and t1 != t2:
-            boundary_couplers.append(c)
-
-    for c in boundary_couplers:
+    heron_boundary = [
+        c for c in qpu_heron.couplers
+        if qpu_heron.qubits[c.q1].active_tenant is not None
+        and qpu_heron.qubits[c.q2].active_tenant is not None
+        and qpu_heron.qubits[c.q1].active_tenant != qpu_heron.qubits[c.q2].active_tenant
+    ]
+    for c in heron_boundary:
         assert c.active is False
-        assert c.zz_crosstalk == 0.0
+        assert c.zz_crosstalk == pytest.approx(round(c.zz_base * qpu_heron.residual_floor, 6))
+
+    # Fixed-coupler Eagle cannot physically switch off resonator buses (residual_floor = 1.0)
+    qpu_eagle = VirtualQPU("eagle")
+    scheduler_e = MultiTenantScheduler(qpu_eagle)
+    scheduler_e.execute_allocation("spectral", {0: 20, 1: 20})
+    for c in qpu_eagle.couplers:
+        t1 = qpu_eagle.qubits[c.q1].active_tenant
+        t2 = qpu_eagle.qubits[c.q2].active_tenant
+        if t1 is not None and t2 is not None and t1 != t2:
+            assert c.active is True
+            assert c.zz_crosstalk == c.zz_base
 
 
 def test_scheduler_tdm_mode():

@@ -4,9 +4,9 @@ from app.simulation.scenarios import SimulationScenarios
 
 
 def test_attack_immunities_and_early_returns():
-    # 1. Rowhammer on Optical Lattice: 0 degradation (neutral atoms)
-    qpu_tm = VirtualQPU("tm_optical_lattice")
-    rh_res = SimulationScenarios.run_rowhammer(qpu_tm, {0: [0]}, 600)
+    # 1. Rowhammer on Optical Lattice (87Sr): 0 degradation (neutral atoms)
+    qpu_sr = VirtualQPU("sr_optical_lattice")
+    rh_res = SimulationScenarios.run_rowhammer(qpu_sr, {0: [0]}, 600)
     assert rh_res["average_degradation_pct"] == 0.0
 
     # 2. RF Leakage on Non-Ion Platform (Eagle): 0 decode accuracy

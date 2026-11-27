@@ -21,11 +21,14 @@ def run_decoherence_audit(
     base_temp = 15.0
     temp_delta = max(0.0, temperature_mk - base_temp)
     
-    # Trapped ions run at room temperature or 4K but are shielded; they don't experience mK thermal decay.
-    is_ion = "ion" in backend.lower() or "quantinuum" in backend.lower()
+    # Trapped ions / neutral atoms operate in laser-cooled UHV traps and are shielded from mK fridge drift.
+    b_lower = backend.lower()
+    is_non_cryo = any(
+        k in b_lower for k in ("ion", "quantinuum", "azure", "neutral", "atom", "sr_", "sr-", "simulated")
+    )
     
-    if is_ion:
-        degradation_factor = 1.0 # No effect
+    if is_non_cryo:
+        degradation_factor = 1.0 # No mK mixing-chamber decay effect
     else:
         # Superconducting chips decay exponentially above 20 mK
         degradation_factor = np.exp(-temp_delta / 8.0) # decay rate
@@ -45,7 +48,7 @@ def run_decoherence_audit(
         
     # Predict circuit execution fidelity under this noise level
     # Base fidelity is proportional to average T2
-    avg_t2 = np.mean(degraded_t2)
+    avg_t2 = max(1e-6, float(np.mean(degraded_t2)))
     gate_time_us = 0.5 # typical gate time
     predicted_fidelity = max(0.01, 0.95 * np.exp(-gate_time_us / avg_t2))
     

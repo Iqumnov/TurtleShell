@@ -4,7 +4,7 @@ from app.simulation.scheduler import MultiTenantScheduler
 
 
 def test_scheduler_all_algorithms_and_platforms():
-    platforms = ["trapped_ion_paul_trap", "tm_optical_lattice", "eagle", "heron"]
+    platforms = ["trapped_ion_paul_trap", "sr_optical_lattice", "eagle", "heron"]
     algos = ["random", "static", "spectral", "tdm", "invalid_fallback"]
 
     for plat in platforms:

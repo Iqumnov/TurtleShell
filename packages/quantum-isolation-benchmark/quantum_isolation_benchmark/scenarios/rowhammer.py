@@ -47,10 +47,14 @@ def run_rowhammer_audit(
         thermal_load = (iterations / 1000.0) * (frequency_mhz / 5.0)
         dist_factor = 1.0 / (min_dist ** 2) if min_dist > 0 else 1.0
         
-        # Superconducting chips (IBM Eagle, Heron, Rigetti, SnowDrop) are sensitive to thermal loads
-        is_ion = "ion" in backend.lower() or "quantinuum" in backend.lower()
-        if is_ion:
-            # Trapped ions have practically zero physical Rowhammer degradation
+        # Superconducting chips (IBM Eagle, Heron, Rigetti, SnowDrop) are sensitive to thermal loads;
+        # Trapped ions and neutral atoms do not share a superconducting substrate.
+        b_lower = backend.lower()
+        is_isolated_arch = any(
+            k in b_lower for k in ("ion", "quantinuum", "azure", "neutral", "atom", "sr_", "sr-", "simulated")
+        )
+        if is_isolated_arch:
+            # Trapped ions & neutral atoms have practically zero substrate Rowhammer degradation
             degrad_t1 = 0.0
             degrad_t2 = 0.0
         else:

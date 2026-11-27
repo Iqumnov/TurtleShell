@@ -25,11 +25,11 @@ def test_virtual_qpu_platforms():
     telemetry = qpu_ion.get_telemetry_vector()
     assert len(telemetry) == 16
 
-    # 2. TmOpticalLattice
-    qpu_tm = VirtualQPU("tm_optical_lattice")
-    assert len(qpu_tm.qubits) == 100
-    assert len(qpu_tm.couplers) > 0
-    assert qpu_tm.temperature_k == 300.0
+    # 2. SrOpticalLattice
+    qpu_sr = VirtualQPU("sr_optical_lattice")
+    assert len(qpu_sr.qubits) == 100
+    assert len(qpu_sr.couplers) > 0
+    assert qpu_sr.temperature_k == 300.0
 
     # 3. Eagle
     qpu_e = VirtualQPU("eagle")

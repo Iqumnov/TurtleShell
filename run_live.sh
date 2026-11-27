@@ -36,7 +36,7 @@ echo "================================================================"
 # Start backend if uvicorn is available
 if "${VENV_PYTHON}" -c "import uvicorn" >/dev/null 2>&1; then
     echo "[+] Starting FastAPI backend on http://127.0.0.1:8000..."
-    (cd "${BACKEND_DIR}" && "${VENV_PYTHON}" -m uvicorn app.main:app --host 127.0.0.1 --port 8000) &
+    (cd "${BACKEND_DIR}" && exec "${VENV_PYTHON}" -m uvicorn app.main:app --host 127.0.0.1 --port 8000) &
     BACKEND_PID=$!
     sleep 1
 else

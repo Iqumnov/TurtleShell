@@ -41,7 +41,7 @@ Given an initial excited phonon state $\bar{n}(0) = \bar{n}_0$ resulting from an
 Evaluating the formula:
 $$\tau_b = \frac{1}{10.0} \ln \left( \frac{100.0 - 0.1}{0.2 - 0.1} \right) = 0.1 \times \ln(999) \approx 0.6908\,\text{seconds}$$
 
-This numerical value matches Table 2 of the benchmark and is verified to within $10^{-3}$ in `turtleshell_contour3.py` and `build_all.sh`.
+This numerical value is verified against the analytical ODE and Lindblad master equation in `packages/turtleshell-live/backend/tests/test_contour3_physics.py` and `test_simulation.py`.
 
 ---
 

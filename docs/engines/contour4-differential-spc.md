@@ -6,16 +6,16 @@ Contour 4 continuously monitors calibration drift, environmental stability, and 
 
 ## 1. Differential Synthetic Frequency Monitoring
 
-For optical atomic platforms and frequency-stabilized systems, common-mode environmental fluctuations (magnetic field drift, temperature swings) are eliminated using the differential synthetic frequency method:
+For optical atomic platforms and frequency-stabilized systems, common-mode linear Zeeman fluctuations ($\nu_\pm = \nu_0 \pm \Delta_Z + \alpha_2 B^2$) are eliminated using the synthetic frequency method:
 
-$$\nu_{\text{syn}} = \frac{\nu_+ - \nu_-}{2}$$
-where $\nu_+$ and $\nu_-$ represent the transition frequencies of Zeeman sublevels exhibiting opposing magnetic sensitivity ($g$-factors). Differential subtraction cancels common-mode environmental noise by $> 40\,\text{dB}$.
+$$\nu_{\text{syn}} = \frac{\nu_+ + \nu_-}{2}$$
+where $\nu_+$ and $\nu_-$ represent transition frequencies of nuclear-spin $\pm m_F$ Zeeman components with opposite first-order magnetic sensitivities. Averaging cancels linear magnetic drift cleanly, isolating second-order / blackbody / lattice-shift telemetry anomalies.
 
 ---
 
 ## 2. Statistical Process Control (SPC) Sliding-Window Detector
 
-Telemetry features $x(t)$ (such as drive frequency drift, readout error spikes, and resonator phase fluctuations) are tracked across a sliding window $W = 60$ ticks:
+Telemetry features $x(t)$ (such as drive frequency drift, readout error spikes, and resonator phase fluctuations) are tracked across a sliding window (default $W = 600$ ticks):
 
 $$\mu_W = \frac{1}{|W|} \sum_{i \in W} x_i, \quad \sigma_W = \sqrt{\frac{1}{|W|} \sum_{i \in W} (x_i - \mu_W)^2}$$
 The normalized $Z$-score is computed as:
@@ -30,19 +30,18 @@ To prevent false-positive alarms caused by heavy-tailed non-Gaussian noise:
 
 ### 2.2 Threat Escalation Matrix
 - **Level 0 (Normal)**: $Z < 2.5$
-- **Level 1 (Notice)**: $2.5 \le Z < 3.5$
-- **Level 2 (Warning)**: $3.5 \le Z < 5.25$
-- **Level 3 (Critical Alert)**: $Z \ge 5.25 \implies$ Immediate circuit suspension and QPU diagnostic re-calibration.
+- **Level 1 (Notice)**: $2.5 \le Z < Z_{\text{crit}}$
+- **Level 2 (Warning)**: $Z_{\text{crit}} \le Z < 1.5\,Z_{\text{crit}}$ ($3.5 \le Z < 5.25$ Gaussian)
+- **Level 3 (Critical Alert)**: $Z \ge 1.5\,Z_{\text{crit}}$ ($5.25$ Gaussian / $10.30$ Student-$t$) $\implies$ Immediate circuit suspension and QPU diagnostic re-calibration.
 
 ---
 
-## 3. Deep Telemetry Autoencoder
+## 3. Standardized Subspace Telemetry Reconstruction (`TelemetryAutoencoder`)
 
-An undercomplete neural network architecture compresses sensor vectors $\mathbf{x} \in \mathbb{R}^8$ into an information bottleneck $\mathbf{z} \in \mathbb{R}^4$:
-$$\mathbf{z} = \sigma(W_e \mathbf{x} + \mathbf{b}_e)$$
-$$\hat{\mathbf{x}} = \sigma(W_d \mathbf{z} + \mathbf{b}_d)$$
+Environmental and calibration telemetry vectors $\mathbf{x} \in \mathbb{R}^{16}$ (averaged $T_1, T_2, \sigma_{T_1}$, gate/readout error rates, $ZZ$ coupling, QPU isolation, phonon heating metrics, RF leakage, and Zeeman-split sensor channels) are standardized using `StandardScaler` ($\tilde{\mathbf{x}} = (\mathbf{x} - \boldsymbol{\mu}) / \boldsymbol{\sigma}$) and projected onto a $k = 4$ principal subspace via Principal Component Analysis (`PCA`):
+$$\mathbf{z} = W_k^T \tilde{\mathbf{x}} \in \mathbb{R}^4, \qquad \hat{\mathbf{x}} = W_k \mathbf{z}$$
 
-Reconstruction error is calculated using Mean Squared Error:
-$$\mathcal{L}(\mathbf{x}, \hat{\mathbf{x}}) = \frac{1}{d} \|\mathbf{x} - \hat{\mathbf{x}}\|_2^2$$
-When $\mathcal{L} > \theta_{\text{auto}} = 0.035$, an unmodeled side-channel excitation is diagnosed.
+Reconstruction error is evaluated via Mean Squared Error in standardized coordinates:
+$$\mathcal{L}(\tilde{\mathbf{x}}, \hat{\mathbf{x}}) = \frac{1}{16} \|\tilde{\mathbf{x}} - \hat{\mathbf{x}}\|_2^2$$
+When $\mathcal{L} > \theta_{\text{spc}}$ (calibrated empirically as the $95^{\text{th}}$ percentile over $N = 1000$ platform-nominal samples), an unmodeled side-channel excitation is diagnosed.
 

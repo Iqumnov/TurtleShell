@@ -29,13 +29,18 @@ def run_prime_probe_audit(
     # The error injected is proportional to the residual excitation
     initial_residual = min(0.85, 0.015 * prime_gates_count)
     
-    is_ion = "ion" in backend.lower() or "quantinuum" in backend.lower()
-    if is_ion:
-        # Trapped ions have active state prep and reset, extremely low temporal interference
-        residual_error = initial_residual * np.exp(-delay_us / (avg_t1 * 10))
+    b_lower = backend.lower()
+    is_superconducting_sim = any(k in b_lower for k in ("eagle", "heron", "transmon", "super"))
+    has_active_reset = (
+        any(k in b_lower for k in ("ion", "quantinuum", "azure", "neutral", "atom", "sr_", "sr-"))
+        or ("simulated" in b_lower and not is_superconducting_sim)
+    )
+    if has_active_reset:
+        # Trapped ions / neutral atoms use active optical pumping or reloading, yielding ~50x lower residual excitation
+        residual_error = 0.02 * initial_residual * np.exp(-delay_us / max(1.0, float(avg_t1)))
     else:
         # Superconducting chips have significant thermal relaxation delay
-        residual_error = initial_residual * np.exp(-delay_us / avg_t1)
+        residual_error = initial_residual * np.exp(-delay_us / max(1.0, float(avg_t1)))
         
     final_fidelity = max(0.1, base_fidelity - residual_error)
     

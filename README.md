@@ -54,9 +54,9 @@ TurtleShell provides a multi-contour defense envelope designed to enforce zero-t
 
 4. **Contour 4 — Differential Telemetry & Statistical Process Control (SPC)**:
    - Real-time calibration drift monitoring using differential synthetic frequency methods:
-     $$\nu_{\text{syn}} = \frac{\nu_+ - \nu_-}{2}$$
+     $$\nu_{\text{syn}} = \frac{\nu_+ + \nu_-}{2}$$
    - Non-Gaussian Kolmogorov-Smirnov statistical anomaly detector with Student-$t$ distribution thresholding ($Z > 3.5\sigma$ / $6.87$).
-   - Deep Autoencoder neural network monitoring environmental sensor telemetry for stealthy microarchitectural side channels.
+   - 16-dimensional Standardized PCA telemetry subspace detector (`StandardScaler` + `PCA(4)`) monitoring environmental sensor vectors for stealthy microarchitectural side channels.
 
 ---
 
@@ -66,48 +66,24 @@ TurtleShell models four canonical, widely-adopted quantum hardware platforms wit
 
 | Platform ID | Architecture | Qubits | Coupling Topology | Physical Characteristics | EuroHPC / EU Ecosystem Counterpart |
 |---|---|---|---|---|---|
-| `trapped_ion_paul_trap` | Linear RF Paul Trap ($^{40}\text{Ca}^+$) | 20–50 | All-to-all motional bus | Individual addressing, phonon heating $\dot{n} \approx 2\,\text{s}^{-1}$ | AQT IBEX / PINE (Innsbruck / EuroHPC JU) |
-| `tm_optical_lattice` | 2D Optical Lattice ($^{87}\text{Sr}$) | 100 | Nearest-neighbor Rydberg | Optical dipole trap, synthetic frequency shift $\nu_{\text{syn}}$ | PASQAL Fresnel / Orion (France / EuroHPC JU) |
-| `eagle` | Superconducting Transmon | 127 | Heavy-Hex (fixed couplers) | Cross-resonance gates, static $ZZ$-coupling ($J \approx 100\,\text{kHz}$) | Standard transmon baseline |
-| `heron` | Superconducting Transmon | 133 | Heavy-Hex (tunable couplers) | Fast flux-tunable couplers, dynamic crosstalk suppression | IQM Radiance / Spark (Finland / Germany / EuroHPC) |
+| `trapped_ion_paul_trap` | Linear RF Paul Trap ($^{40}\text{Ca}^+$) | 20–50 | All-to-all motional bus | Individual addressing, phonon heating $\dot{n} \approx 0.02\text{--}0.1\,\text{s}^{-1}$ | AQT IBEX / PINE (Innsbruck / EuroHPC JU) |
+| `sr_optical_lattice` | 2D Optical Lattice ($^{87}\text{Sr}$) | 100 | Nearest-neighbor Rydberg | Optical dipole trap (~1 $\mu\text{K}$ atoms in 300 K UHV chamber), $\nu_{\text{syn}}$ | PASQAL Fresnel / Orion-class neutral atoms (France / EuroHPC JU) |
+| `eagle` | Superconducting Transmon | 127 | Heavy-Hex (fixed couplers) | Cross-resonance gates, static $ZZ$-coupling ($J \approx 4.8\,\text{kHz}$) | Standard transmon baseline |
+| `heron` | Superconducting Transmon | 133 | Heavy-Hex (tunable couplers) | Fast flux-tunable couplers, dynamic crosstalk suppression ($J \approx 1.1\,\text{kHz}$) | IQM Radiance / Spark (Finland / Germany / EuroHPC) |
 
 ### European & Luxembourg (EuroHPC JU) Infrastructure Context
 
 Luxembourg serves as the administrative and technological headquarters of the **EuroHPC Joint Undertaking (EuroHPC JU)**, driving European quantum sovereignty. Under EuroHPC JU and national infrastructure initiatives (such as **LuxProvide MeluXina** in Bissen, Luxembourg, and **LuxQCI / EAGLE-1**):
 - **AQT Trapped-Ion Integration**: TurtleShell's `trapped_ion_paul_trap` directly models the physical vibrational and RF leakage dynamics of AQT $^{40}\text{Ca}^+$ hardware procured for EuroHPC supercomputing centers.
-- **PASQAL Neutral Atoms**: The `tm_optical_lattice` platform reflects Rydberg blockade arrays deployed under EuroHPC hybrid quantum initiatives.
+- **Neutral-Atom Optical Lattice ($^{87}\text{Sr}$ / PASQAL-class)**: The `sr_optical_lattice` platform models 2D Rydberg blockade arrays ($R_b \approx 5.2\,\mu\text{m}$ at $a = 4.0\,\mu\text{m}$) aligned with European neutral-atom quantum systems.
 - **IQM Superconducting Transmons**: The tunable transmon model (`heron`) captures dynamic flux-bias isolation implemented in modern European quantum processors.
 - **MeluXina Hybrid Quantum Cloud**: Provides the zero-trust multi-tenant isolation layer required to run concurrent academic and industrial workloads on shared EuroHPC quantum accelerators.
 
 ---
 
-## 3. Documentation Architecture
+## 3. Deployment, Execution Modes & Documentation
 
-TurtleShell technical documentation is organized according to the **Diataxis** framework:
-
-```text
-docs/
-|-- README.md                         # Documentation Portal & Navigation Index
-|-- architecture/
-|   |-- system-architecture.md        # 5-Layer Stack, Concurrency, and Dual-Mode Runtime
-|   `-- hardware-platforms.md         # Physical Calibrations, AQT, PASQAL, IQM & EuroHPC
-|-- engines/
-|   |-- contour1-partitioning.md      # Graph Laplacian Bisection and LMS Adaptive Filter
-|   |-- contour2-compiler-audit.md    # SHA-256 Hashing and Isolation Forest Trojan Gate
-|   |-- contour3-thermal-buffer.md    # Analytical Cooling Buffer Duration (tau_b) & QuTiP
-|   `-- contour4-differential-spc.md  # Synthetic Frequency, KS Test, and Autoencoder
-`-- reference/
-    |-- cli-reference.md              # Complete qib CLI Commands, Options, and Exit Codes
-    `-- api-and-websocket.md          # REST Endpoints and WebSocket Wire Protocol
-```
-
-Access the documentation portal at [docs/README.md](docs/README.md).
-
----
-
-## 3. Deployment & Execution Modes
-
-TurtleShell is designed with two complementary runtimes:
+TurtleShell is organized with [Diataxis documentation](docs/README.md) across `docs/` (`architecture/`, `engines/`, `reference/`) and runs in two complementary runtimes:
 
 ### Mode A: Standalone Client-Side Web Platform (Flagship)
 - **Zero-Backend Requirement**: Deployed as a static single-page application on Cloudflare Pages ([https://turtleshell.iqumnov.com](https://turtleshell.iqumnov.com)).
@@ -194,6 +170,7 @@ qib schedule --platform heron --tenants 3 --algo spectral
 | **§5.4** | **Contour 4: Differential Monitor** | $Z = \frac{\|x - \mu\|}{\sigma} \ge Z_{\text{crit}}$ | `backend/app/simulation/defense.py` |
 | **§5.4** | **Contour 4: Telemetry Autoencoder** | $\mathcal{L}(x, \hat{x}) = \|x - \text{Dec}(\text{Enc}(x))\|_2^2$ | `backend/app/ml/models.py` |
 | **§6.0** | **Economics: Financial ROI** | $\text{Net Benefit} = \text{Savings} - \text{Overhead}$ | `backend/app/main.py` |
+| **Lean 4** | **Formal Invariants (Zero-Sorry)** | Laplacian PSD, NLMS bound, Cooling $\tau_b > 0$, Zeeman cancel, $T_2 \le 2T_1$ | `proofs/TurtleShellProofs.lean` |
 
 ---
 
@@ -207,7 +184,7 @@ If you use **TurtleShell** in your research, isolation benchmarks, or quantum cl
   title        = {TurtleShell: Multi-Contour Process Isolation and Side-Channel Defense Framework for Multi-Tenant Quantum Clouds},
   year         = {2026},
   publisher    = {GitHub},
-  version      = {0.1.0},
+  version      = {1.0.0},
   doi          = {10.5281/zenodo.24528037},
   url          = {https://github.com/Iqumnov/TurtleShell}
 }
@@ -276,9 +253,9 @@ TurtleShell предоставляет многоконтурную архите
 
 4. **Контур 4 — Дифференциальная телеметрия и статистический контроль процессов (SPC)**:
    - Мониторинг дрейфа калибровки в реальном времени с использованием метода синтетических частот:
-     $$\nu_{\text{syn}} = \frac{\nu_+ - \nu_-}{2}$$
+     $$\nu_{\text{syn}} = \frac{\nu_+ + \nu_-}{2}$$
    - Непараметрический детектор аномалий Колмогорова-Смирнова с адаптивными порогами распределения Стьюдента ($Z > 3.5\sigma$ / $6.87$).
-   - Глубокий автоэнкодер для анализа многопараметрической сенсорной телеметрии и выявления скрытых микроархитектурных каналов утечки.
+   - 16-мерный детектор подпространства телеметрии на базе стандартизированного метода главных компонент (`StandardScaler` + `PCA(4)`) для выявления скрытых микроархитектурных каналов утечки.
 
 ---
 
@@ -288,16 +265,16 @@ TurtleShell моделирует 4 канонические аппаратные
 
 | Идентификатор | Архитектура | Кубиты | Топология взаимодействия | Физические параметры | Аналог в EuroHPC / ЕС |
 |---|---|---|---|---|---|
-| `trapped_ion_paul_trap` | Линейная ловушка Пауля ($^{40}\text{Ca}^+$) | 20–50 | Общая колебательная шина | Индивидуальная адресация, скорость нагрева $\dot{n} \approx 2\,\text{с}^{-1}$ | AQT IBEX / PINE (Инсбрук / EuroHPC JU) |
-| `tm_optical_lattice` | 2D оптическая решетка ($^{87}\text{Sr}$) | 100 | Ближайшие соседи (Ридберг) | Оптические дипольные ловушки, синтетический сдвиг $\nu_{\text{syn}}$ | PASQAL Fresnel / Orion (Франция / EuroHPC JU) |
-| `eagle` | Сверхпроводниковые трансмоны | 127 | Heavy-Hex (фиксированные связи) | Кросс-резонансные вентили, статическая связь $ZZ$ ($J \approx 100\,\text{кГц}$) | Стандартная архитектура трансмонов |
-| `heron` | Сверхпроводниковые трансмоны | 133 | Heavy-Hex (перестраиваемые связи) | Быстрые перестраиваемые потоковые связи, подавление наводок | IQM Radiance / Spark (Финляндия / Германия / EuroHPC) |
+| `trapped_ion_paul_trap` | Линейная ловушка Пауля ($^{40}\text{Ca}^+$) | 20–50 | Общая колебательная шина | Индивидуальная адресация, скорость нагрева $\dot{n} \approx 0.02\text{--}0.1\,\text{с}^{-1}$ | AQT IBEX / PINE (Инсбрук / EuroHPC JU) |
+| `sr_optical_lattice` | 2D оптическая решетка ($^{87}\text{Sr}$) | 100 | Ближайшие соседи (Ридберг) | Оптические дипольные ловушки (~1 мкК в УВВ-камере 300 К), $\nu_{\text{syn}}$ | PASQAL Fresnel / нейтральные атомы EuroHPC JU |
+| `eagle` | Сверхпроводниковые трансмоны | 127 | Heavy-Hex (фиксированные связи) | Кросс-резонансные вентили, статическая связь $ZZ$ ($J \approx 4.8\,\text{кГц}$) | Стандартная архитектура трансмонов |
+| `heron` | Сверхпроводниковые трансмоны | 133 | Heavy-Hex (перестраиваемые связи) | Быстрые перестраиваемые потоковые связи, подавление наводок ($J \approx 1.1\,\text{кГц}$) | IQM Radiance / Spark (Финляндия / Германия / EuroHPC) |
 
 ### Контекст европейской квантовой инфраструктуры (EuroHPC JU)
 
 Люксембург является административной и технологической штаб-квартирой совместного предприятия **EuroHPC Joint Undertaking (EuroHPC JU)**, координирующего квантовые вычисления в Европе (включая **LuxProvide MeluXina** в Биссене и **LuxQCI / EAGLE-1**):
 - **Ионные ловушки AQT**: Модель `trapped_ion_paul_trap` напрямую воспроизводит колебательную динамику и утечки СВЧ-излучения процессоров AQT $^{40}\text{Ca}^+$, закупаемых для центров EuroHPC.
-- **Нейтральные атомы PASQAL**: Платформа `tm_optical_lattice` отражает физику ридберговской блокады гибридных квантовых систем EuroHPC.
+- **Нейтральные атомы ($^{87}\text{Sr}$ / класс PASQAL)**: Платформа `sr_optical_lattice` отражает физику 2D ридберговской блокады ($R_b \approx 5.2\,\text{мкм}$ при $a = 4.0\,\text{мкм}$) европейских нейроатомных систем EuroHPC.
 - **Сверхпроводниковые процессоры IQM**: Модель с перестраиваемыми связями (`heron`) моделирует динамическую изоляцию современных европейских процессоров IQM.
 - **Гибридное облако MeluXina**: Обеспечивает уровень изоляции Zero-Trust для параллельного выполнения академических и коммерческих квантовых вычислений.
 
@@ -356,6 +333,7 @@ qib schedule --platform heron --tenants 3 --algo spectral
 | **§5.4** | **Контур 4: Дифференциальный монитор** | $Z = \frac{\|x - \mu\|}{\sigma} \ge Z_{\text{crit}}$ | `backend/app/simulation/defense.py` |
 | **§5.4** | **Контур 4: Автоэнкодер телеметрии** | $\mathcal{L}(x, \hat{x}) = \|x - \text{Dec}(\text{Enc}(x))\|_2^2$ | `backend/app/ml/models.py` |
 | **§6.0** | **Экономика: Финансовая окупаемость** | $\text{Чистая выгода} = \text{Экономия} - \text{Накладные расходы}$ | `backend/app/main.py` |
+| **Lean 4** | **Формальные инварианты (0 `sorry`)** | ПП-определенность $L$, граница NLMS, $\tau_b > 0$, Зееман, $T_2 \le 2T_1$ | `proofs/TurtleShellProofs.lean` |
 
 ---
 
@@ -369,7 +347,7 @@ qib schedule --platform heron --tenants 3 --algo spectral
   title        = {TurtleShell: Multi-Contour Process Isolation and Side-Channel Defense Framework for Multi-Tenant Quantum Clouds},
   year         = {2026},
   publisher    = {GitHub},
-  version      = {0.1.0},
+  version      = {1.0.0},
   doi          = {10.5281/zenodo.24528037},
   url          = {https://github.com/Iqumnov/TurtleShell}
 }

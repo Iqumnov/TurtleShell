@@ -3,7 +3,7 @@ import { useSimStore } from '../store/useSimStore';
 
 const PLATFORM_IMAGES: Record<string, string> = {
   trapped_ion_paul_trap: '/TrappedIonPaulTrap.PNG',
-  tm_optical_lattice: '/TmOpticalLattice.PNG',
+  sr_optical_lattice: '/SrOpticalLattice.PNG',
   eagle: '/IBMEagle.PNG',
   heron: '/IBMHeron.PNG',
 };
@@ -79,6 +79,7 @@ export const PlatformBackground: React.FC = () => {
       <img
         src={displayImg}
         alt=""
+        decoding="async"
         style={{
           position: 'relative',
           width: '100%',

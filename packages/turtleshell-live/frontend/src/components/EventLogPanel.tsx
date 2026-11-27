@@ -21,8 +21,8 @@ export const EventLogPanel: React.FC = () => {
     if (metrics.anomaly_flagged_l2) {
       nextLogs.push(
         isRu
-          ? `[${timestamp}] [C2] АНОМАЛИЯ: несоответствие SHA-256 (${(metrics.anomaly_score_l2 * 100).toFixed(1)}%)`
-          : `[${timestamp}] [C2] ANOMALY: SHA-256 mismatch (${(metrics.anomaly_score_l2 * 100).toFixed(1)}%)`
+          ? `[${timestamp}] [C2] АНОМАЛИЯ: целостность компиляции (довер. ${(metrics.anomaly_score_l2 * 100).toFixed(1)}%)`
+          : `[${timestamp}] [C2] ANOMALY: SHA-256 mismatch (conf ${(metrics.anomaly_score_l2 * 100).toFixed(1)}%)`
       );
     }
     if (store.defenseL3 && metrics.time_step % 10 === 0) {

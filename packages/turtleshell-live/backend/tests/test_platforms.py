@@ -8,11 +8,11 @@ def test_platform_physical_invariants():
     assert abs(qpu_ion.qubits[0].t1_base - 1.0e6) / 1.0e6 < 0.05
     assert qpu_ion.heating_rate > 0
 
-    # 2. TmOpticalLattice: T1=6e7 µs, heating_rate = 0 (neutral atoms)
-    qpu_tm = VirtualQPU("tm_optical_lattice")
-    assert abs(qpu_tm.qubits[0].t1_base - 6.0e7) / 6.0e7 < 0.05
-    assert qpu_tm.heating_rate == 0.0
-    assert qpu_tm.clock_freq_hz > 0
+    # 2. SrOpticalLattice: T1=6e7 µs, heating_rate = 0 (neutral atoms)
+    qpu_sr = VirtualQPU("sr_optical_lattice")
+    assert abs(qpu_sr.qubits[0].t1_base - 6.0e7) / 6.0e7 < 0.05
+    assert qpu_sr.heating_rate == 0.0
+    assert qpu_sr.clock_freq_hz > 0
 
     # 3. Superconducting Eagle & Heron: clock_freq_hz = 0
     qpu_e = VirtualQPU("eagle")

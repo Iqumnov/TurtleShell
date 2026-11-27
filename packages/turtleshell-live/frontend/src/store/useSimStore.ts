@@ -183,15 +183,19 @@ const pushMetrics = (set: any, data: SimMetrics) => {
 };
 
 const startClientSimulation = (set: any, get: any) => {
-  if (clientTimer) return;
+  if (clientTimer) {
+    clearInterval(clientTimer);
+    clientTimer = null;
+  }
   clientEngine.updateConfig(get());
   pushMetrics(set, clientEngine.tick());
   set({ connected: true });
+  const intervalMs = Math.max(100, Math.round(1000 / Math.max(0.1, get().playbackSpeed || 1.0)));
   clientTimer = setInterval(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       pushMetrics(set, clientEngine.tick());
     }
-  }, 1000);
+  }, intervalMs);
 };
 
 const stopClientSimulation = () => {
@@ -205,6 +209,28 @@ const BACKEND_URL = (typeof window !== 'undefined' && window.location.hostname &
   ? `${window.location.hostname}:8000`
   : "127.0.0.1:8000";
 
+const DEFAULT_ENGINE_CONFIG = {
+  qpuType: "eagle",
+  ionSpecies: "Ca40",
+  nIons: 20,
+  tenantCount: 3,
+  schedulingAlgo: "random",
+  activeScenario: "crosstalk",
+  crosstalkIntensity: 80,
+  gateFrequencyHz: 1e6,
+  rowhammerIterations: 600,
+  primeDelayUs: 100,
+  envTemperatureMk: 15,
+  snrDb: -10,
+  defenseL1: false,
+  defenseL2: false,
+  defenseL3: false,
+  defenseL4: false,
+  hourlyCost: 1200,
+  utilization: 65,
+  playbackSpeed: 1.0,
+};
+clientEngine.updateConfig(DEFAULT_ENGINE_CONFIG);
 const initialMetrics = clientEngine.tick();
 
 export const useSimStore = create<SimStore>()(
@@ -259,18 +285,42 @@ export const useSimStore = create<SimStore>()(
     document.documentElement.setAttribute('data-theme', nextTheme);
     set({ theme: nextTheme });
   },
-  language: 'EN',
+  language: (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('ru')) ? 'RU' : 'EN',
   setLanguage: (lang) => set({ language: lang }),
 
   playbackSpeed: 1.0,
   setPlaybackSpeed: (speed: number) => {
     set({ playbackSpeed: speed });
+    if (clientTimer) {
+      startClientSimulation(set, get);
+    }
     get().syncConfigWithBackend();
   },
 
   setConfigs: (configs) => {
+    const prevQpu = get().qpuType;
     set(configs);
-    clientEngine.updateConfig(configs);
+    if (configs.qpuType && configs.qpuType !== prevQpu) {
+      clientEngine.updateConfig(get());
+      clientEngine.reset();
+      const fresh = clientEngine.tick();
+      set({
+        metrics: fresh,
+        scrubIndex: null,
+        history: {
+          fidelity: [fresh.fidelity * 100],
+          savings: [fresh.cumulative_savings],
+          costs: [fresh.cumulative_costs],
+          lossL4: [fresh.autoencoder_loss_l4],
+          labels: [`#${fresh.time_step}`],
+          qpu: [fresh.qpu],
+          zScore: [fresh.monitor_z_score ?? 0],
+          phonon: [fresh.phonon_number ?? 0],
+        },
+      });
+    } else {
+      clientEngine.updateConfig(configs);
+    }
     get().syncConfigWithBackend();
   },
 
@@ -358,6 +408,12 @@ export const useSimStore = create<SimStore>()(
       ws.onclose = () => {
         ws = null;
         startClientSimulation(set, get);
+        if (isLocal && !reconnectTimer) {
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            attemptConnect();
+          }, 5000);
+        }
       };
 
       ws.onerror = () => {
@@ -383,22 +439,25 @@ export const useSimStore = create<SimStore>()(
   },
 
   resetSim: async () => {
+    clientEngine.updateConfig(get());
     clientEngine.reset();
+    const fresh = clientEngine.tick();
     try {
       await fetch(`http://${BACKEND_URL}/api/simulation/reset`, { method: "POST" });
     } catch (e) {
       // Backend offline, fallback client engine reset is sufficient
     }
     set({
+      metrics: fresh,
       history: {
-        fidelity: [],
-        savings: [],
-        costs: [],
-        lossL4: [],
-        labels: [],
-        qpu: [],
-        zScore: [],
-        phonon: [],
+        fidelity: [fresh.fidelity * 100],
+        savings: [fresh.cumulative_savings],
+        costs: [fresh.cumulative_costs],
+        lossL4: [fresh.autoencoder_loss_l4],
+        labels: [`#${fresh.time_step}`],
+        qpu: [fresh.qpu],
+        zScore: [fresh.monitor_z_score ?? 0],
+        phonon: [fresh.phonon_number ?? 0],
       },
       scrubIndex: null,
     });

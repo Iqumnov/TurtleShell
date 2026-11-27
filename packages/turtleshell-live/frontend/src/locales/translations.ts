@@ -14,7 +14,7 @@ export const translations = {
 
     // QPU / Platform Options
     qpuTrappedIonPaulTrap: "TrappedIonPaulTrap (Paul Trap, Ca-40/Sr-88)",
-    qpuTmOpticalLattice: "TmOpticalLattice (Neutral Atoms 2D Array, 300K)",
+    qpuSrOpticalLattice: "SrOpticalLattice (87Sr Neutral Atoms 2D Array, 300K UHV)",
     qpuEagle: "Superconducting IBM Eagle (127Q Heavy-Hex)",
     qpuHeron: "Superconducting IBM Heron (133Q Tunable Couplers)",
 
@@ -64,7 +64,7 @@ export const translations = {
     defL2Title: "Contour 2: Compiler Verification",
     defL2Desc: "SHA-256 circuit hash + Isolation Forest audit",
     defL3Title: "Contour 3: Laser Cooling Buffer",
-    defL3Desc: "τ_б phonon cooling formula (ion traps) / T1 reset (SC)",
+    defL3Desc: "τ_b phonon cooling formula (ion traps) / T1 reset (SC)",
     defL4Title: "Contour 4: Differential Monitor",
     defL4Desc: "z-score SPC + synthetic frequency + autoencoder",
 
@@ -110,7 +110,7 @@ export const translations = {
     phonon_nbar: "Phonon n̄",
     rfLeakageDb: "RF Leakage",
     lmsSuppression: "LMS Suppression",
-    coolingTau: "Cooling τ_б",
+    coolingTau: "Cooling τ_b",
     threatLevel: "Threat Level (SPC)",
     syntheticFreqLabel: "Clock Beat Note (Optical Lattice)",
     circuitHash: "Circuit SHA-256",
@@ -187,7 +187,7 @@ export const translations = {
 
     // Platform-specific dialogues
     dialogueIonTrapPlatform: (n: string, species: string, nbar: string) => `Platform Selected: TrappedIonPaulTrap (${n} ${species} ions in linear Paul trap). Phonon state n̄ = ${nbar}. All-to-all coupling active.`,
-    dialogueOpticalLatticePlatform: "Platform Selected: TmOpticalLattice (100 Thulium atoms in 2D lattice at 300K). Clock transition at 2.63x10^14 Hz. Immune to RF leakage.",
+    dialogueOpticalLatticePlatform: "Platform Selected: SrOpticalLattice (100 laser-cooled 87Sr atoms at ~1 µK in 2D lattice inside 300K UHV chamber). Clock transition at 4.29x10^14 Hz (λ = 698.4 nm). Immune to RF leakage.",
     dialogueEaglePlatform: "Platform Selected: IBM Eagle (127-qubit transmon array). Operational temperature: 15mK.",
     dialogueHeronPlatform: "Platform Selected: IBM Heron (133-qubit transmon array with tunable couplers). Operational temperature: 15mK.",
 
@@ -246,7 +246,7 @@ export const translations = {
 
     // QPU / Platform Options
     qpuTrappedIonPaulTrap: "TrappedIonPaulTrap (Линейная ловушка Пауля, Ca-40)",
-    qpuTmOpticalLattice: "TmOpticalLattice (Оптическая решётка нейтральных атомов, 300K)",
+    qpuSrOpticalLattice: "SrOpticalLattice (Оптическая решётка 87Sr, 300K УВВ)",
     qpuEagle: "IBM Eagle (127-кубитный СП)",
     qpuHeron: "IBM Heron (133-кубитный СП)",
 
@@ -418,7 +418,7 @@ export const translations = {
 
     // Platform-specific dialogues
     dialogueIonTrapPlatform: (n: string, species: string, nbar: string) => `Платформа выбрана: TrappedIonPaulTrap (${n} ионов ${species} в линейной ловушке Пауля). Фононное состояние n̄ = ${nbar}. All-to-all связь активна.`,
-    dialogueOpticalLatticePlatform: "Платформа выбрана: TmOpticalLattice (100 атомов Тулия в 2D решетке при 300K). Часовой переход 2.63x10^14 Гц. Иммунна к РЧ-утечке.",
+    dialogueOpticalLatticePlatform: "Платформа выбрана: SrOpticalLattice (100 охлаждённых до ~1 мкК атомов Стронция-87 в 2D оптической решётке, УВВ-камера 300K). Часовой переход 4.29x10^14 Гц (λ = 698.4 нм). Иммунна к РЧ-утечке.",
     dialogueEaglePlatform: "Платформа выбрана: IBM Eagle (127-кубитный трансмонный массив). Рабочая температура: 15мК.",
     dialogueHeronPlatform: "Платформа выбрана: IBM Heron (133-кубитный трансмонный массив с настраиваемыми куплерами). Рабочая температура: 15мК.",
 

@@ -18,7 +18,7 @@ export const KameChan: React.FC = () => {
   const t = translations[lang];
 
   const isIonTrap = store.qpuType === 'trapped_ion_paul_trap' || store.qpuType.includes('trapped_ion');
-  const isTmLattice = store.qpuType === 'tm_optical_lattice';
+  const isSrLattice = store.qpuType === 'sr_optical_lattice';
   const isEagle = store.qpuType === 'eagle';
   const isHeron = store.qpuType === 'heron';
 
@@ -128,7 +128,7 @@ export const KameChan: React.FC = () => {
           (metrics.phonon_number ?? 0).toFixed(4)
         );
       }
-      if (isTmLattice) return t.dialogueOpticalLatticePlatform;
+      if (isSrLattice) return t.dialogueOpticalLatticePlatform;
       if (isEagle) return t.dialogueEaglePlatform;
       if (isHeron) return t.dialogueHeronPlatform;
     }
@@ -159,7 +159,7 @@ export const KameChan: React.FC = () => {
     return t.dialogueWelcome;
   };
 
-  const cleanSpeech = getSpeech().replace(/[^\x00-\x7FА-Яа-яёЁ0-9\s.,!?:;%()'"\-\/\\$^<=>+*#]/g, '');
+  const cleanSpeech = getSpeech().replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, '');
 
   return (
     <div className="w-full hud-panel p-3.5 text-sm font-mono leading-relaxed select-text text-[var(--text-main)]">

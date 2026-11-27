@@ -60,8 +60,12 @@ class LMSFilter:
         # Error signal
         error = desired - filtered_output
         
-        # LMS weight update: w(k+1) = w(k) + 2µ × e(k) × u(k)
-        self.weights = self.weights + 2.0 * self.mu * error * self.signal_buffer
+        # Normalized LMS step bound: guarantees stability (2 * mu_eff * ||u||^2 < 1 < 2)
+        # across arbitrary filter orders (M=8..128) and signal amplitudes while preserving
+        # exact standard LMS step size mu when within the convergence bound.
+        norm_sq = float(np.dot(self.signal_buffer, self.signal_buffer)) + 1e-8
+        effective_mu = min(self.mu, 0.45 / norm_sq)
+        self.weights = self.weights + 2.0 * effective_mu * error * self.signal_buffer
         
         self._step_count += 1
         # Append once to each history (error was double-appended previously — bug fixed)
@@ -88,16 +92,17 @@ class LMSFilter:
     
     def simulate_rf_suppression(self, base_leakage_db: float) -> float:
         """
-        Simulates LMS filter effect on RF leakage level.
+        Simulates LMS adaptive noise cancellation on RF leakage level.
+        Models a reference RF drive u(k) canceling a phase-shifted, attenuated
+        parasitic leakage signal d(k) on the victim channel (Widrow-Hoff ANC).
         Returns suppressed leakage level in dB.
         """
-        # Run a short LMS simulation on synthetic RF signal (non-aliased sampling)
         omega = 2 * math.pi * 1e6  # 1 MHz RF frequency
-        for k in range(50):
+        for k in range(120):
             t = k * 1.35e-6  # Non-integer period sampling to prevent aliasing
-            rf_signal = math.sin(omega * t + 0.5) + 0.1 * float(self._rng.standard_normal())
-            desired = 0.0  # We want to cancel the RF
-            self.update(desired, rf_signal)
+            ref_drive = math.sin(omega * t) + 0.02 * float(self._rng.standard_normal())
+            leaked_desired = 0.85 * math.sin(omega * t - 0.35) + 0.03 * float(self._rng.standard_normal())
+            self.update(leaked_desired, ref_drive)
         
         # Suppression achieved
         return base_leakage_db - self.suppression_db
@@ -259,18 +264,19 @@ class DifferentialMonitor:
     
     def compute_synthetic_frequency(self, nu_plus: float, nu_minus: float) -> float:
         """
-        SPECS §5.4.1: Synthetic frequency method.
-        ν_syn = (ν+ - ν-) / 2
-        
-        This combination is insensitive to Zeeman shifts but sensitive to:
-        - Temperature perturbations
-        - Vibrations
-        - Mode heating
+        SPECS §5.4.1: Synthetic frequency method (Zeeman-free mean of opposite m_F transitions).
+        ν_syn = (ν+ + ν-) / 2
+
+        Since first-order Zeeman shifts enter with opposite signs on ν± = ν_0 ± Δ_Z + α_2 B²,
+        their average cancels the linear magnetic shift while remaining sensitive to:
+        - Blackbody radiation / temperature perturbations
+        - Lattice vibrations and AC Stark shifts
+        - Motional mode heating
         """
         self._nu_plus_history.append(nu_plus)
         self._nu_minus_history.append(nu_minus)
         
-        return (nu_plus - nu_minus) / 2.0
+        return (nu_plus + nu_minus) / 2.0
     
     def update(self, telemetry_value: float, nu_plus: float = 0.0, nu_minus: float = 0.0) -> Dict[str, Any]:
         """
@@ -294,15 +300,17 @@ class DifferentialMonitor:
                 "is_gaussian": True,
             }
         
+        # Baseline statistics computed strictly over prior observations (arr[:-1]) so
+        # Samuelson's inequality (z <= sqrt(n-1) < 3.5 for n <= 13) cannot self-mask spikes.
         arr = np.array(list(self.history))
-        mu = float(np.mean(arr))
-        sigma = float(np.std(arr))
+        baseline = arr[:-1]
+        mu = float(np.mean(baseline))
+        sigma = float(np.std(baseline))
         
         # Noise floor: prevents division-by-zero when all window values are identical.
         # σ_min = 0.02 ≈ smallest physically resolvable coherence variation (µs).
         sigma = max(0.02, sigma)
-        # Cold-start (≤5 samples): no anomaly evidence yet — return 0.0, not random noise.
-        z = abs(telemetry_value - mu) / sigma if len(arr) > 5 else 0.0
+        z = abs(telemetry_value - mu) / sigma
         
         self.z_score = z
         
@@ -319,8 +327,8 @@ class DifferentialMonitor:
         if is_gaussian:
             threshold = self.SIGMA_THRESHOLD
         else:
-            # Student-t distribution with df=5 (heavier tails) — SPECS §5.4.2 (two-tailed alpha=10^-3)
-            threshold = float(scipy_stats.t.ppf(0.9995, df=5))  # ~3.5σ equivalent
+            # Student-t distribution with df=5 (heavier tails) — SPECS §5.4.2 (two-tailed alpha=10^-3 -> ~6.87)
+            threshold = float(scipy_stats.t.ppf(0.9995, df=5))
         
         self.is_anomaly = z >= threshold
         
@@ -350,6 +358,11 @@ class DifferentialMonitor:
             "is_gaussian": is_gaussian,
         }
     
+    def set_platform(self, layout_type: str) -> None:
+        """Calibrate internal autoencoder baseline to the active QPU architecture."""
+        if hasattr(self._ae, "set_platform"):
+            self._ae.set_platform(layout_type)
+
     def reconstruct(self, telemetry_vector: List[float]) -> Tuple[float, bool]:
         """
         Autoencoder reconstruction for multi-dimensional anomaly detection.
