@@ -114,6 +114,8 @@ class TelemetryAutoencoder:
         Returns: (reconstruction_mse, is_anomaly)
         """
         vec = np.array(telemetry_vector, dtype=float).reshape(1, -1)
+        if vec.shape[1] == 0:
+            raise ValueError("reconstruct requires a non-empty telemetry vector")
         if vec.shape[1] != self.input_dim:
             if vec.shape[1] < self.input_dim:
                 vec = np.pad(vec, ((0, 0), (0, self.input_dim - vec.shape[1])), mode='constant', constant_values=0.0)

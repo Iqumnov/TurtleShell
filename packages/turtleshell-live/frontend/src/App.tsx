@@ -70,28 +70,61 @@ export const App: React.FC = () => {
       {/* Left Toolbar Column (Fixed Width ~310px) */}
       <aside className="w-full md:w-[310px] flex-shrink-0 flex flex-col gap-3">
         
-        {/* Header with compact ASCII turtle, Title, Theme & Language toggles */}
+        {/* Header with geometric turtle emblem, Title, Theme & Language toggles */}
         <header
-          className="hud-panel p-2.5 flex items-center justify-between gap-1 overflow-hidden select-text border border-[var(--border-color)] bg-[var(--panel-bg)] text-[var(--text-main)]"
+          className="hud-panel p-2.5 flex items-center justify-between gap-2 overflow-hidden select-text border border-[var(--border-color)] bg-[var(--panel-bg)] text-[var(--text-main)]"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <pre className="font-mono text-[9px] font-bold leading-none select-none text-[var(--text-main)] flex-shrink-0">
-{`(o,o)
-/---\\
- " "`}</pre>
-            <h1 className="text-sm font-bold tracking-wider uppercase font-mono text-[var(--text-main)] truncate">
+            <svg
+              width="26"
+              height="26"
+              viewBox="0 0 64 64"
+              fill="none"
+              aria-hidden="true"
+              className="flex-shrink-0"
+            >
+              <path d="M21 21L9 14L7.5 21.5L17 28Z" fill="var(--text-main)" opacity="0.88" />
+              <path d="M43 21L55 14L56.5 21.5L47 28Z" fill="var(--text-main)" opacity="0.88" />
+              <path d="M20 42L10 50.5L15.5 54.5L24.5 47Z" fill="var(--text-main)" opacity="0.88" />
+              <path d="M44 42L54 50.5L48.5 54.5L39.5 47Z" fill="var(--text-main)" opacity="0.88" />
+              <path d="M29 50L32 58.5L35 50Z" fill="var(--text-main)" opacity="0.88" />
+              <path d="M26.5 15V9.5L32 5L37.5 9.5V15Z" fill="var(--text-main)" />
+              <polygon
+                points="32,13 47.5,21.5 47.5,42 32,51 16.5,42 16.5,21.5"
+                fill="var(--inset-bg)"
+                stroke="var(--text-main)"
+                strokeWidth="2.8"
+                strokeLinejoin="round"
+              />
+              <polygon
+                points="32,22 40,26.8 40,36.8 32,41.8 24,36.8 24,26.8"
+                fill="none"
+                stroke="var(--text-main)"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M32 13V22M47.5 21.5L40 26.8M47.5 42L40 36.8M32 51V41.8M16.5 42L24 36.8M16.5 21.5L24 26.8"
+                stroke="var(--text-main)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            <h1 className="text-sm font-bold tracking-tight font-mono text-[var(--text-main)] truncate">
               TurtleShell
             </h1>
           </div>
 
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
+              type="button"
               onClick={toggleTheme}
-              className="hud-button text-xs p-1 bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--text-main)]"
-              title={lang === 'RU' ? 'Переключить тему' : 'Toggle Theme'}
+              className="border-0 bg-transparent p-1.5 cursor-pointer text-[var(--text-main)] opacity-85 hover:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-bright)] transition-opacity"
+              title={lang === 'RU' ? 'Переключить тему' : 'Toggle theme'}
+              aria-label={lang === 'RU' ? 'Переключить тему' : 'Toggle theme'}
             >
               {theme === 'dark' ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="5" />
                   <line x1="12" y1="1" x2="12" y2="3" />
                   <line x1="12" y1="21" x2="12" y2="23" />
@@ -103,15 +136,17 @@ export const App: React.FC = () => {
                   <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                 </svg>
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                 </svg>
               )}
             </button>
             <button
+              type="button"
               onClick={() => setLanguage(lang === 'EN' ? 'RU' : 'EN')}
               className="hud-button text-xs px-1.5 py-0.5 font-bold bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--text-main)]"
-              title={lang === 'RU' ? 'Сменить язык' : 'Switch Language'}
+              title={lang === 'RU' ? 'Сменить язык' : 'Switch language'}
+              aria-label={lang === 'RU' ? 'Сменить язык' : 'Switch language'}
             >
               {lang}
             </button>
@@ -138,14 +173,14 @@ export const App: React.FC = () => {
         <MetricsPanel />
 
         {/* Row 3: 3-Column Row: Event Log (3) | Circuit Audit (4) | Correlation Matrix (5) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
-          <div className="lg:col-span-3 flex flex-col">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+          <div className="xl:col-span-3 flex flex-col">
             <EventLogPanel />
           </div>
-          <div className="lg:col-span-4 flex flex-col">
+          <div className="xl:col-span-4 flex flex-col">
             <CircuitHighlighter />
           </div>
-          <div className="lg:col-span-5 flex flex-col">
+          <div className="xl:col-span-5 flex flex-col">
             <CorrelationMatrix />
           </div>
         </div>

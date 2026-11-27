@@ -90,6 +90,26 @@ function generateStabilizers(qubits: QubitState[], adjList: Map<number, number[]
   return stabilizers;
 }
 
+const CHIP_W = 700;
+const CHIP_H = 360;
+const CHIP_PAD = 28;
+const CHIP_BARRIER = 60;
+
+function clampChipPan(tx: number, ty: number, s: number): { x: number; y: number } {
+  const fieldL = tx + CHIP_PAD * s;
+  const fieldR = tx + (CHIP_W - CHIP_PAD) * s;
+  const fieldT = ty + CHIP_PAD * s;
+  const fieldB = ty + (CHIP_H - CHIP_PAD) * s;
+
+  let cx = tx;
+  let cy = ty;
+  if (fieldR < CHIP_BARRIER) cx = CHIP_BARRIER - (CHIP_W - CHIP_PAD) * s;
+  if (fieldL > CHIP_W - CHIP_BARRIER) cx = (CHIP_W - CHIP_BARRIER) - CHIP_PAD * s;
+  if (fieldB < CHIP_BARRIER) cy = CHIP_BARRIER - (CHIP_H - CHIP_PAD) * s;
+  if (fieldT > CHIP_H - CHIP_BARRIER) cy = (CHIP_H - CHIP_BARRIER) - CHIP_PAD * s;
+  return { x: cx, y: cy };
+}
+
 export const Chip3DViewer: React.FC = () => {
   const store = useSimStore();
   const metrics = store.metrics;
@@ -104,6 +124,7 @@ export const Chip3DViewer: React.FC = () => {
   const defenseL3 = store.defenseL3;
   const defenseL4 = store.defenseL4;
   const scrubIndex = store.scrubIndex;
+  const isLight = store.theme === 'light';
   
   const lang = store.language;
   const t = translations[lang];
@@ -119,6 +140,37 @@ export const Chip3DViewer: React.FC = () => {
 
   const [svgElement, setSvgElement] = useState<SVGSVGElement | null>(null);
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
+  const didDragRef = React.useRef(false);
+  const touchStateRef = React.useRef<{
+    mode: 'none' | 'pan' | 'pinch';
+    lastClientX: number;
+    lastClientY: number;
+    startDist: number;
+    startScale: number;
+    startViewX: number;
+    startViewY: number;
+    centerSvgX: number;
+    centerSvgY: number;
+  }>({
+    mode: 'none',
+    lastClientX: 0,
+    lastClientY: 0,
+    startDist: 0,
+    startScale: 1,
+    startViewX: 0,
+    startViewY: 0,
+    centerSvgX: CHIP_W / 2,
+    centerSvgY: CHIP_H / 2,
+  });
+  const viewStateRef = React.useRef(viewState);
+  viewStateRef.current = viewState;
+
+  const getClientToSvgScale = React.useCallback(() => {
+    if (!svgElement) return { sx: 1, sy: 1 };
+    const rect = svgElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { sx: 1, sy: 1 };
+    return { sx: CHIP_W / rect.width, sy: CHIP_H / rect.height };
+  }, [svgElement]);
 
   // Animate pulses/effects every tick when playing live (paused during rewind scrubbing)
   useEffect(() => {
@@ -127,7 +179,13 @@ export const Chip3DViewer: React.FC = () => {
     return () => clearInterval(id);
   }, [connected, scrubIndex]);
 
-  // Native non-passive listeners for smooth, lag-free mouse wheel zoom & prevent page scrolling
+  // Reset pan/zoom and hover cleanly when platform topology changes
+  useEffect(() => {
+    setViewState({ scale: 1.0, x: 0, y: 0 });
+    setHoveredQubitId(null);
+  }, [store.qpuType]);
+
+  // Native non-passive listeners on map viewport for smooth mouse wheel zoom & touch pan/pinch
   useEffect(() => {
     const target = containerElement || svgElement;
     if (!target) return;
@@ -155,65 +213,125 @@ export const Chip3DViewer: React.FC = () => {
 
         const rawX = mouseX - (mouseX - prev.x) * ratio;
         const rawY = mouseY - (mouseY - prev.y) * ratio;
+        const clamped = clampChipPan(rawX, rawY, nextScale);
 
-        // We can't call clampPan here (it's defined after the early-return),
-        // so we inline the same clamping logic with the same constants.
-        const BARRIER_INLINE = 60;
-        const PAD_INLINE = 28;
-        const W_INLINE = 700;
-        const H_INLINE = 360;
-
-        const fieldR = rawX + (W_INLINE - PAD_INLINE) * nextScale;
-        const fieldL = rawX + PAD_INLINE * nextScale;
-        const fieldB = rawY + (H_INLINE - PAD_INLINE) * nextScale;
-        const fieldT = rawY + PAD_INLINE * nextScale;
-
-        let cx = rawX;
-        let cy = rawY;
-        if (fieldR < BARRIER_INLINE) cx = BARRIER_INLINE - (W_INLINE - PAD_INLINE) * nextScale;
-        if (fieldL > W_INLINE - BARRIER_INLINE) cx = (W_INLINE - BARRIER_INLINE) - PAD_INLINE * nextScale;
-        if (fieldB < BARRIER_INLINE) cy = BARRIER_INLINE - (H_INLINE - PAD_INLINE) * nextScale;
-        if (fieldT > H_INLINE - BARRIER_INLINE) cy = (H_INLINE - BARRIER_INLINE) - PAD_INLINE * nextScale;
-
-        return { scale: nextScale, x: cx, y: cy };
+        return { scale: nextScale, x: clamped.x, y: clamped.y };
       });
+    };
+
+    const getSvgPoint = (clientX: number, clientY: number) => {
+      if (svgElement) {
+        const ctm = svgElement.getScreenCTM();
+        if (ctm) {
+          const pt = svgElement.createSVGPoint();
+          pt.x = clientX;
+          pt.y = clientY;
+          const tPt = pt.matrixTransform(ctm.inverse());
+          return { x: tPt.x, y: tPt.y };
+        }
+      }
+      return { x: CHIP_W / 2, y: CHIP_H / 2 };
     };
 
     const handleTouchStartNative = (e: Event) => {
       const touchEv = e as TouchEvent;
-      if (touchEv.touches.length === 2) {
+      if (touchEv.touches.length === 1) {
+        didDragRef.current = false;
+        touchStateRef.current = {
+          ...touchStateRef.current,
+          mode: 'pan',
+          lastClientX: touchEv.touches[0].clientX,
+          lastClientY: touchEv.touches[0].clientY,
+        };
+      } else if (touchEv.touches.length === 2) {
         touchEv.preventDefault();
+        didDragRef.current = true;
+        const t0 = touchEv.touches[0];
+        const t1 = touchEv.touches[1];
+        const dist = Math.max(1, Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY));
+        const mid = getSvgPoint((t0.clientX + t1.clientX) / 2, (t0.clientY + t1.clientY) / 2);
+        const cur = viewStateRef.current;
+        touchStateRef.current = {
+          ...touchStateRef.current,
+          mode: 'pinch',
+          startDist: dist,
+          startScale: cur.scale,
+          startViewX: cur.x,
+          startViewY: cur.y,
+          centerSvgX: mid.x,
+          centerSvgY: mid.y,
+        };
       }
     };
 
     const handleTouchMoveNative = (e: Event) => {
       const touchEv = e as TouchEvent;
-      if (touchEv.touches.length === 2) {
+      const state = touchStateRef.current;
+      if (touchEv.touches.length === 1 && state.mode === 'pan') {
+        const dxClient = touchEv.touches[0].clientX - state.lastClientX;
+        const dyClient = touchEv.touches[0].clientY - state.lastClientY;
+        if (Math.hypot(dxClient, dyClient) > 2) {
+          didDragRef.current = true;
+          touchEv.preventDefault();
+        }
+        state.lastClientX = touchEv.touches[0].clientX;
+        state.lastClientY = touchEv.touches[0].clientY;
+        const { sx, sy } = getClientToSvgScale();
+        setViewState((prev) => {
+          const clamped = clampChipPan(prev.x + dxClient * sx, prev.y + dyClient * sy, prev.scale);
+          return { ...prev, x: clamped.x, y: clamped.y };
+        });
+      } else if (touchEv.touches.length === 2 && state.mode === 'pinch') {
         touchEv.preventDefault();
+        const t0 = touchEv.touches[0];
+        const t1 = touchEv.touches[1];
+        const dist = Math.max(1, Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY));
+        const nextScale = Math.min(3.5, Math.max(0.6, state.startScale * (dist / state.startDist)));
+        const ratio = nextScale / state.startScale;
+        const rawX = state.centerSvgX - (state.centerSvgX - state.startViewX) * ratio;
+        const rawY = state.centerSvgY - (state.centerSvgY - state.startViewY) * ratio;
+        const clamped = clampChipPan(rawX, rawY, nextScale);
+        setViewState({ scale: nextScale, x: clamped.x, y: clamped.y });
+      }
+    };
+
+    const handleTouchEndNative = (e: Event) => {
+      const touchEv = e as TouchEvent;
+      if (touchEv.touches.length === 0) {
+        touchStateRef.current.mode = 'none';
+      } else if (touchEv.touches.length === 1) {
+        touchStateRef.current = {
+          ...touchStateRef.current,
+          mode: 'pan',
+          lastClientX: touchEv.touches[0].clientX,
+          lastClientY: touchEv.touches[0].clientY,
+        };
       }
     };
 
     target.addEventListener('wheel', handleScrollZoom, { passive: false });
     target.addEventListener('touchstart', handleTouchStartNative, { passive: false });
     target.addEventListener('touchmove', handleTouchMoveNative, { passive: false });
+    target.addEventListener('touchend', handleTouchEndNative);
 
     return () => {
       target.removeEventListener('wheel', handleScrollZoom);
       target.removeEventListener('touchstart', handleTouchStartNative);
       target.removeEventListener('touchmove', handleTouchMoveNative);
+      target.removeEventListener('touchend', handleTouchEndNative);
     };
-  }, [containerElement, svgElement]);
+  }, [containerElement, svgElement, getClientToSvgScale]);
 
-  const W = 700;
-  const H = 360;
-  const PAD = 28;
+  const W = CHIP_W;
+  const H = CHIP_H;
+  const PAD = CHIP_PAD;
 
   if (!metrics || !metrics.qpu) {
     return (
       <div className="w-full h-full min-h-[350px] flex flex-col font-mono text-xs gap-3 p-0 hud-panel">
         <div className="hud-inset p-2 font-bold select-none text-xs">{t.diagnosticErrorTitle}</div>
         <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-          <div className="hud-inset bg-black p-4 font-bold text-xs leading-relaxed w-72">
+          <div className="hud-inset bg-[var(--inset-bg)] p-4 font-bold text-xs leading-relaxed w-72">
             {t.noTelemetryStream}
             <br />
             {t.qpuTimeout}
@@ -224,6 +342,7 @@ export const Chip3DViewer: React.FC = () => {
             {t.ensurePythonServer}
           </span>
           <button
+            type="button"
             onClick={connectWS}
             className="hud-button px-4 py-1 text-xs"
           >
@@ -272,64 +391,27 @@ export const Chip3DViewer: React.FC = () => {
     return 148.0;
   };
 
-  // ─── Pan clamping barrier ──────────────────────────────────────────────────
-  // Prevents the user from panning so far that the entire qubit topology
-  // leaves the viewport. The qubit field in SVG coords spans [PAD, W-PAD] x
-  // [PAD, H-PAD]. After transform translate(tx,ty) scale(s), field edges are:
-  //   left   = tx + PAD * s       right  = tx + (W-PAD) * s
-  //   top    = ty + PAD * s       bottom = ty + (H-PAD) * s
-  //
-  // Rule: at least BARRIER px of the field must remain inside the viewport.
-  const BARRIER = 60; // how many SVG px of field must stay visible
-  const clampPan = (tx: number, ty: number, s: number): { x: number; y: number } => {
-    const fieldL = tx + PAD * s;
-    const fieldR = tx + (W - PAD) * s;
-    const fieldT = ty + PAD * s;
-    const fieldB = ty + (H - PAD) * s;
-
-    let cx = tx;
-    let cy = ty;
-
-    // Don't let right edge of field go further left than BARRIER px from left of viewport
-    if (fieldR < BARRIER) cx = BARRIER - (W - PAD) * s;
-    // Don't let left edge of field go further right than (W - BARRIER) px
-    if (fieldL > W - BARRIER) cx = (W - BARRIER) - PAD * s;
-    // Same vertically
-    if (fieldB < BARRIER) cy = BARRIER - (H - PAD) * s;
-    if (fieldT > H - BARRIER) cy = (H - BARRIER) - PAD * s;
-
-    return { x: cx, y: cy };
-  };
-  // ──────────────────────────────────────────────────────────────────────────
-
-  const hoveredQubit = hoveredQubitId !== null ? (qubits.find(q => q.id === hoveredQubitId) ?? null) : null;
+  const hoveredQubit = hoveredQubitId !== null ? (qubits.find((q) => q.id === hoveredQubitId) ?? null) : null;
 
   const fmtTime = (us: number): string => {
     if (!isFinite(us) || isNaN(us) || us <= 0) return '—';
     const isRu = lang === 'RU';
     const sec = us / 1e6;
+    if (sec >= 1e3) return `${(sec / 1e3).toPrecision(3).replace(/\.?0+$/, '')} ${isRu ? 'кс' : 'ks'}`;
     if (sec >= 1) return `${sec.toPrecision(3).replace(/\.?0+$/, '')} ${isRu ? 'с' : 's'}`;
     if (us >= 1e3) return `${(us / 1e3).toPrecision(3).replace(/\.?0+$/, '')} ${isRu ? 'мс' : 'ms'}`;
     return `${us.toFixed(1)} ${isRu ? 'мкс' : 'µs'}`;
   };
 
-  // Mouse drag and panning handlers (exact SVG CTM inversion accounts for preserveAspectRatio letterboxing)
-  const getClientToSvgScale = () => {
-    if (!svgElement) return { sx: 1, sy: 1 };
-    const ctm = svgElement.getScreenCTM();
-    if (ctm && ctm.a > 0 && ctm.d > 0) {
-      return { sx: 1 / ctm.a, sy: 1 / ctm.d };
-    }
-    const rect = svgElement.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return { sx: 1, sy: 1 };
-    return { sx: W / rect.width, sy: H / rect.height };
-  };
-
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (e.button !== 0) return;
-    setIsDragging(true);
     const { sx, sy } = getClientToSvgScale();
-    setDragStart({ x: e.clientX * sx - viewState.x, y: e.clientY * sy - viewState.y });
+    didDragRef.current = false;
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX * sx - viewState.x,
+      y: e.clientY * sy - viewState.y,
+    });
   };
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -337,7 +419,10 @@ export const Chip3DViewer: React.FC = () => {
     const { sx, sy } = getClientToSvgScale();
     const rawX = e.clientX * sx - dragStart.x;
     const rawY = e.clientY * sy - dragStart.y;
-    const clamped = clampPan(rawX, rawY, viewState.scale);
+    if (Math.abs(rawX - viewState.x) > 1.5 || Math.abs(rawY - viewState.y) > 1.5) {
+      didDragRef.current = true;
+    }
+    const clamped = clampChipPan(rawX, rawY, viewState.scale);
     setViewState((prev) => ({ ...prev, x: clamped.x, y: clamped.y }));
   };
 
@@ -346,12 +431,12 @@ export const Chip3DViewer: React.FC = () => {
   };
 
   return (
-    <div ref={setContainerElement} className="relative w-full h-[520px] hud-panel overflow-hidden flex flex-col">
+    <div className="relative w-full h-[340px] sm:h-[440px] lg:h-[520px] hud-panel overflow-hidden flex flex-col">
       
       {/* No display-mode tabs — always unified synthesis view */}
 
       {/* SVG Chip Map Display */}
-      <div className="flex-1 bg-[var(--bg-color)] p-2 relative overflow-hidden">
+      <div ref={setContainerElement} className="flex-1 bg-[var(--bg-color)] p-2 relative overflow-hidden touch-none">
         <svg
           ref={setSvgElement}
           viewBox={`0 0 ${W} ${H}`}
@@ -360,6 +445,9 @@ export const Chip3DViewer: React.FC = () => {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onClick={() => {
+            if (!didDragRef.current) setHoveredQubitId(null);
+          }}
         >
           <g transform={`translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`}>
 
@@ -431,7 +519,7 @@ export const Chip3DViewer: React.FC = () => {
                 const isIdle = q.active_tenant === null;
                 const r = baseR;
 
-                const color = getTenantColor(q.active_tenant);
+                const color = getTenantColor(q.active_tenant, isLight);
                 const nodeOpacity = 0.95;
 
                 // 100% Physics-Driven Contour-Specific Heatmap calculation
@@ -568,12 +656,12 @@ export const Chip3DViewer: React.FC = () => {
                         y={pos.y - r * 1.5}
                         textAnchor="middle"
                         fontSize={r * 0.75}
-                        fill={getTenantColor(q.active_tenant)}
+                        fill={getTenantColor(q.active_tenant, isLight)}
                         fontWeight="bold"
                         fontFamily="monospace"
                         pointerEvents="none"
                       >
-                        {q.active_tenant === 0 ? '[V]' : q.active_tenant === 1 ? '[A]' : `[T${q.active_tenant}]`}
+                        {q.active_tenant === 0 ? 'V' : q.active_tenant === 1 ? 'A' : `T${q.active_tenant}`}
                       </text>
                     )}
 
@@ -589,6 +677,12 @@ export const Chip3DViewer: React.FC = () => {
                       className="cursor-pointer transition-all duration-150"
                       onMouseEnter={() => setHoveredQubitId(q.id)}
                       onMouseLeave={() => setHoveredQubitId(null)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!didDragRef.current) {
+                          setHoveredQubitId((prev) => (prev === q.id ? null : q.id));
+                        }
+                      }}
                     />
 
                     {/* Qubit ID number */}
@@ -598,7 +692,7 @@ export const Chip3DViewer: React.FC = () => {
                         y={pos.y + 3.5}
                         textAnchor="middle"
                         fontSize={r * 0.7}
-                        fill={isIdle ? 'var(--text-muted)' : 'var(--bg-color)'}
+                        fill={isIdle ? 'var(--text-muted)' : (isLight ? '#ffffff' : 'var(--bg-color)')}
                         fontWeight="bold"
                         fontFamily="monospace"
                         pointerEvents="none"
@@ -620,19 +714,20 @@ export const Chip3DViewer: React.FC = () => {
           if (!pos) return null;
           const sx = viewState.x + pos.x * viewState.scale;
           const sy = viewState.y + pos.y * viewState.scale;
-          const left = Math.min(W - 190, Math.max(10, sx + 15));
-          const top = Math.min(H - 135, Math.max(10, sy - 40));
           const baseT1 = getQubitBaseT1();
           const t1Val = hoveredQubit.t1 ?? baseT1;
           const t2Val = hoveredQubit.t2 ?? (baseT1 * 0.65);
 
           return (
             <div
-              style={{ left: `${(left / W) * 100}%`, top: `${(top / H) * 100}%` }}
+              style={{
+                left: `clamp(6px, calc(${(sx / W) * 100}% + 10px), calc(100% - 12.5rem))`,
+                top: `clamp(6px, calc(${(sy / H) * 100}% - 24px), calc(100% - 9rem))`,
+              }}
               className="absolute pointer-events-none p-2.5 hud-panel bg-[var(--bg-color)] border border-[var(--border-bright)] text-xs font-mono w-48 flex flex-col gap-1.5 z-20"
             >
               <div className="font-bold border-b border-[var(--border-color)] pb-1 flex justify-between">
-                <span>QUBIT Q{hoveredQubit.id}</span>
+                <span>{lang === 'RU' ? 'Кубит' : 'Qubit'} Q{hoveredQubit.id}</span>
                 <span className="text-[var(--text-muted)]">
                   {hoveredQubit.active_tenant === null ? t.qubitIdle : `${t.qubitTenant} ${hoveredQubit.active_tenant}`}
                 </span>
@@ -660,28 +755,32 @@ export const Chip3DViewer: React.FC = () => {
         {/* Buttons Group */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
+            type="button"
             onClick={() => { connected ? disconnectWS() : connectWS(); }}
             className="hud-button py-1 px-2 font-bold text-xs"
             title={connected ? (lang === 'RU' ? 'Пауза телеметрии' : 'Pause Telemetry') : (lang === 'RU' ? 'Запуск телеметрии' : 'Start Telemetry')}
+            aria-label={connected ? (lang === 'RU' ? 'Пауза телеметрии' : 'Pause telemetry') : (lang === 'RU' ? 'Запуск телеметрии' : 'Start telemetry')}
           >
             {connected ? (
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
                 <rect x="2" y="1" width="3" height="10" />
                 <rect x="7" y="1" width="3" height="10" />
               </svg>
             ) : (
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
                 <polygon points="2,1 11,6 2,11" />
               </svg>
             )}
           </button>
           
           <button
+            type="button"
             onClick={() => resetSim()}
             className="hud-button py-1 px-2 font-bold text-xs"
             title={lang === 'RU' ? 'Сброс симуляции' : 'Reset Simulation'}
+            aria-label={lang === 'RU' ? 'Сброс симуляции' : 'Reset simulation'}
           >
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
               <path d="M2 6a4 4 0 1 1 1.2 2.8" />
               <polyline points="2,2 2,6 6,6" />
             </svg>
@@ -689,6 +788,7 @@ export const Chip3DViewer: React.FC = () => {
           
           {/* Jump to Start */}
           <button
+            type="button"
             onClick={() => {
               if (history.qpu.length === 0) return;
               store.setScrubIndex(0);
@@ -696,8 +796,9 @@ export const Chip3DViewer: React.FC = () => {
             className="hud-button py-1 px-2 font-bold text-xs"
             disabled={history.qpu.length === 0}
             title={lang === 'RU' ? 'В начало шкалы' : 'Jump to Start'}
+            aria-label={lang === 'RU' ? 'В начало шкалы' : 'Jump to start'}
           >
-            <svg width="12" height="10" viewBox="0 0 14 12" fill="currentColor">
+            <svg width="12" height="10" viewBox="0 0 14 12" fill="currentColor" aria-hidden="true">
               <line x1="1.5" y1="1" x2="1.5" y2="11" stroke="currentColor" strokeWidth="1.5" />
               <line x1="4.5" y1="1" x2="4.5" y2="11" stroke="currentColor" strokeWidth="1.5" />
               <polygon points="13,1 7,6 13,11" />
@@ -706,6 +807,7 @@ export const Chip3DViewer: React.FC = () => {
 
           {/* Previous Step */}
           <button
+            type="button"
             onClick={() => {
               if (history.qpu.length === 0) return;
               const idx = scrubIndex === null ? history.qpu.length - 1 : scrubIndex;
@@ -714,8 +816,9 @@ export const Chip3DViewer: React.FC = () => {
             className="hud-button py-1 px-2 font-bold text-xs"
             disabled={history.qpu.length === 0}
             title={lang === 'RU' ? 'Предыдущий шаг' : 'Previous Step'}
+            aria-label={lang === 'RU' ? 'Предыдущий шаг' : 'Previous step'}
           >
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
               <line x1="1.5" y1="1" x2="1.5" y2="11" stroke="currentColor" strokeWidth="1.5" />
               <polygon points="11,1 4.5,6 11,11" />
             </svg>
@@ -723,6 +826,7 @@ export const Chip3DViewer: React.FC = () => {
 
           {/* Next Step */}
           <button
+            type="button"
             onClick={() => {
               if (history.qpu.length === 0 || scrubIndex === null) return;
               const nextIdx = scrubIndex + 1;
@@ -735,8 +839,9 @@ export const Chip3DViewer: React.FC = () => {
             className="hud-button py-1 px-2 font-bold text-xs"
             disabled={scrubIndex === null}
             title={lang === 'RU' ? 'Следующий шаг' : 'Next Step'}
+            aria-label={lang === 'RU' ? 'Следующий шаг' : 'Next step'}
           >
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
               <polygon points="1,1 7.5,6 1,11" />
               <line x1="10.5" y1="1" x2="10.5" y2="11" stroke="currentColor" strokeWidth="1.5" />
             </svg>
@@ -753,7 +858,7 @@ export const Chip3DViewer: React.FC = () => {
               { value: 2.0, label: '2.0x' },
               { value: 5.0, label: '5.0x' },
             ]}
-            className="w-16 self-stretch flex items-center"
+            className="w-16 self-stretch"
           />
         </div>
 
@@ -761,6 +866,7 @@ export const Chip3DViewer: React.FC = () => {
         <div className="flex-1 flex items-center gap-2">
           <input
             type="range"
+            aria-label={lang === 'RU' ? 'Шкала времени симуляции' : 'Simulation timeline scrubber'}
             min="0"
             max={Math.max(0, history.qpu.length - 1)}
             value={scrubIndex === null ? Math.max(0, history.qpu.length - 1) : scrubIndex}

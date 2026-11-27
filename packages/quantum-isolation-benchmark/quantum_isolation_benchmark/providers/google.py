@@ -1,4 +1,3 @@
-import random
 import numpy as np
 from typing import Dict, List, Any, Tuple
 from ..core import QuantumProvider
@@ -112,14 +111,14 @@ class GoogleProvider(QuantumProvider):
         for idx, (circ, qubits) in enumerate(circuits_with_qubits):
             key = f"tenant_{idx}"
             measure_keys.append(key)
-            q_map = {q: cirq.GridQubit(qubits[i] // 6, qubits[i] % 6) for i, q in enumerate(sorted(circ.all_qubits())) if i < len(qubits)}
+            q_map = {q: cirq.GridQubit(qubits[i] // 9, qubits[i] % 9) for i, q in enumerate(sorted(circ.all_qubits())) if i < len(qubits)}
             mapped = circ.transform_qubits(lambda q, m=q_map: m.get(q, q))
             # Re-tag terminal measurements or append tagged measurement on mapped qubits
             for moment in mapped:
                 ops = [op for op in moment.operations if not isinstance(op.gate, cirq.MeasurementGate)]
                 if ops:
                     merged_circuit.append(cirq.Moment(ops))
-            target_qs = [cirq.GridQubit(q // 6, q % 6) for q in qubits]
+            target_qs = [cirq.GridQubit(q // 9, q % 9) for q in qubits]
             if target_qs:
                 merged_circuit.append(cirq.measure(*target_qs, key=key))
 

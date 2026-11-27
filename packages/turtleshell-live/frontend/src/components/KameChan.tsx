@@ -75,9 +75,14 @@ export const KameChan: React.FC = () => {
     // Scenario 1: Crosstalk
     if (activeScenario === 'crosstalk') {
       if (!defenseL1 && !defenseL2) {
-        const hops = String(metrics.active_scenario_metrics?.crosstalk_hops ?? -1);
-        const drop = String(metrics.fidelity_drop);
-        return t.dialogueCrosstalkVulnerable(hops, drop);
+        const rawHops = metrics.active_scenario_metrics?.crosstalk_hops ?? -1;
+        const drop = String(Math.max(0, metrics.fidelity_drop ?? 0));
+        if (rawHops < 0) {
+          return lang === 'RU'
+            ? `Сценарий 1 активен: Изоляция задач (TDM / без смежных связей) исключает одновременные перекрёстные помехи. Падение верности: ${drop}%.`
+            : `Scenario 1 Active: Workload separation (TDM / uncoupled layout) prevents simultaneous neighbor crosstalk. Fidelity drop: ${drop}%.`;
+        }
+        return t.dialogueCrosstalkVulnerable(String(rawHops), drop);
       }
       if (defenseL1 && !defenseL2) return t.dialogueCrosstalkL1Active;
       if (!defenseL1 && defenseL2) return t.dialogueCrosstalkL2Active;
@@ -93,8 +98,14 @@ export const KameChan: React.FC = () => {
           degradation.toFixed(1)
         );
       }
+      const delayUs = metrics.buffer_delay_us ?? 0;
+      if (delayUs <= 0 && (metrics.platform_type?.includes('trapped_ion') || metrics.platform_type?.includes('sr_optical'))) {
+        return lang === 'RU'
+          ? 'Контур 3 активен: Непрерывное лазерное охлаждение подавляет фононный нагрев и тепловой резонанс.'
+          : 'Contour 3 Active: Continuous laser cooling suppresses vibrational heating and thermal resonance.';
+      }
       return t.dialogueRowhammerMitigated(
-        (metrics.buffer_delay_us ?? 0).toFixed(1),
+        delayUs.toFixed(1),
         (metrics.buffer_overhead_pct ?? 0).toFixed(1)
       );
     }

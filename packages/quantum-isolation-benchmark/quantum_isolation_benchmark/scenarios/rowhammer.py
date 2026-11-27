@@ -30,13 +30,15 @@ def run_rowhammer_audit(
     total_t1_final = 0.0
     
     for v_q in victim_qubits:
+        if v_q not in calibration.get("T1", {}) or v_q not in calibration.get("T2", {}):
+            continue
         min_dist = 999
         for a_q in aggressor_qubits:
             try:
                 dist = nx.shortest_path_length(G, a_q, v_q)
                 if dist < min_dist:
                     min_dist = dist
-            except nx.NetworkXNoPath:
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
                 pass
                 
         # Calculate T1/T2 degradation
@@ -45,7 +47,7 @@ def run_rowhammer_audit(
         t2_init = calibration["T2"][v_q]
         
         thermal_load = (iterations / 1000.0) * (frequency_mhz / 5.0)
-        dist_factor = 1.0 / (min_dist ** 2) if min_dist > 0 else 1.0
+        dist_factor = (1.0 / (min_dist ** 2)) if 0 < min_dist < 999 else (1.0 if min_dist == 0 else 0.0)
         
         # Superconducting chips (IBM Eagle, Heron, Rigetti, SnowDrop) are sensitive to thermal loads;
         # Trapped ions and neutral atoms do not share a superconducting substrate.

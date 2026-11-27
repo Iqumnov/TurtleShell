@@ -1,13 +1,6 @@
 import React, { useState } from 'react';
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, canConnectToBackend, getBackendHttpUrl } from '../store/useSimStore';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-
-const USE_PROXY = import.meta.env.VITE_USE_PROXY === 'true';
-
-// Derive backend URL from the same source as the WS store to support deployment
-const BACKEND_WS_HOST = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost')
-  ? `${window.location.hostname}:8000`
-  : '127.0.0.1:8000';
 
 export const AcademicPanel: React.FC = () => {
   const store = useSimStore();
@@ -17,26 +10,28 @@ export const AcademicPanel: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'zz' | 'c3'>('zz');
 
   React.useEffect(() => {
-    const isLocal = typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    if (typeof window !== 'undefined' && !USE_PROXY && (window.location.protocol === 'https:' || !isLocal)) {
+    if (typeof window !== 'undefined' && (!canConnectToBackend() || (import.meta.env.VITE_USE_PROXY !== 'true' && window.location.protocol === 'https:'))) {
       return;
     }
 
     const controller = new AbortController();
-    const url = USE_PROXY ? '/api/qutip/verify' : `http://${BACKEND_WS_HOST}/api/qutip/verify`;
+    const timer = setTimeout(() => {
+      const url = getBackendHttpUrl('/api/qutip/verify');
+      fetch(url, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setQutipData(data);
+        })
+        .catch(() => {
+          // Backend optional in standalone mode or request aborted
+        });
+    }, 120);
 
-    fetch(url, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setQutipData(data);
-      })
-      .catch(() => {
-        // Backend optional in standalone mode or request aborted
-      });
-
-    return () => controller.abort();
-  }, [store.activeScenario, store.defenseL1, store.defenseL2, store.defenseL3, store.defenseL4, store.qpuType]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [store.activeScenario, store.defenseL1, store.defenseL2, store.defenseL3, store.defenseL4, store.qpuType, store.ionSpecies, store.nIons]);
 
   const zzData = qutipData?.zz_crosstalk?.times_us?.map((tVal: number, idx: number) => ({
     time: Number(tVal.toFixed(2)),
@@ -52,23 +47,29 @@ export const AcademicPanel: React.FC = () => {
   const renderQuTiPAuditSection = (isRu: boolean) => (
     <div className="mt-3 p-3 hud-inset flex flex-col gap-2 border border-[var(--border-color)] select-text">
       <div className="flex justify-between items-center flex-wrap gap-2">
-        <span className="font-bold text-xs uppercase text-[var(--text-main)]">
-          {isRu ? "ЧИСЛЕННЫЙ СОЛВЕР QUTIP (СТАТЬЯ №1 УР. 1 И СТАТЬЯ №2 УР. 5)" : "QUTIP LINDBLAD NUMERICAL SOLVER (PAPER #1 EQ. 1 & PAPER #2 EQ. 5)"}
+        <span className="font-bold text-xs text-[var(--text-main)]">
+          {isRu ? "Численный солвер QuTiP (Статья №1 ур. 1 и Статья №2 ур. 5)" : "QuTiP Lindblad numerical solver (Paper #1 Eq. 1 & Paper #2 Eq. 5)"}
         </span>
         <div className="flex items-center gap-2">
           {qutipData && (
-            <div className="flex gap-1">
+            <div className="flex gap-1" role="tablist" aria-label={isRu ? 'Вкладки QuTiP верификации' : 'QuTiP verification tabs'}>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeSubTab === 'zz'}
                 onClick={() => setActiveSubTab('zz')}
-                className={`hud-button text-xs px-2 py-0.5 ${activeSubTab === 'zz' ? 'font-bold bg-[var(--text-main)] text-[var(--bg-color)]' : ''}`}
+                className={`hud-button text-xs px-2 py-0.5 ${activeSubTab === 'zz' ? 'hud-button-active font-bold' : ''}`}
               >
-                {isRu ? "ПЕРЕКРЕСТНЫЕ ПОМЕХИ (F(t))" : "ZZ CROSSTALK (F(t))"}
+                {isRu ? "Перекрестные помехи F(t)" : "ZZ crosstalk F(t)"}
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeSubTab === 'c3'}
                 onClick={() => setActiveSubTab('c3')}
-                className={`hud-button text-xs px-2 py-0.5 ${activeSubTab === 'c3' ? 'font-bold bg-[var(--text-main)] text-[var(--bg-color)]' : ''}`}
+                className={`hud-button text-xs px-2 py-0.5 ${activeSubTab === 'c3' ? 'hud-button-active font-bold' : ''}`}
               >
-                {isRu ? "КОНТУР 3 ОХЛАЖДЕНИЕ (n̄(τ))" : "CONTOUR 3 COOLING (n̄(τ))"}
+                {isRu ? "Контур 3: охлаждение n̄(τ)" : "Contour 3 cooling n̄(τ)"}
               </button>
             </div>
           )}
@@ -168,7 +169,7 @@ export const AcademicPanel: React.FC = () => {
         Этот симулятор (<strong>TurtleShell-RT</strong>) и фреймворк бенчмаркинга (<strong>Quantum Cloud Isolation Benchmarking Framework</strong>) являются референсной реализацией архитектурной концепции: <span className="underline italic">"TurtleShell: Концепция многоконтурной защиты при изоляции процессов в мультитенантных квантовых облаках"</span> (в подготовке к публикации).
       </p>
 
-      <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Классы квантовых физических платформ:</p>
+      <p className="font-bold text-xs text-[var(--text-muted)] mt-1">Классы квантовых физических платформ:</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>TrappedIonPaulTrap</strong> — линейная ловушка Пауля с ионами Ca-40/Sr-88/Ba-138/Yb-171 (Leibfried et al. 2003, Deslauriers 2006). T1=1с, T2=0.5с, связность all-to-all (J_ij ~ 1/|i-j|³). Угрозы: перекрестные помехи, РЧ-утечка, фононные остатки Prime-and-Probe.</li>
         <li><strong>SrOpticalLattice</strong> — нейтральные атомы Стронция-87 (<sup>87</sup>Sr, ~1 мкК в УВВ-камере 300К) в 2D оптической решётке (Boyd et al. 2007, Saffman 2016). T1=60с, T2=30с. Часовой переход 4.29×10¹⁴ Гц (698.4 нм). Иммунна к РЧ-атакам.</li>
@@ -176,7 +177,7 @@ export const AcademicPanel: React.FC = () => {
         <li><strong>IBM Heron</strong> — 133-кубитный сверхпроводящий процессор с управляемыми куплерами. T1≈172мкс, ZZ≈1.1 кГц. После расстройки Контура 1 остаточный ZZ ≈ 15%.</li>
       </ul>
 
-      <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Эффективность партиционирования и показания шума (SPECS §5.1):</p>
+      <p className="font-bold text-xs text-[var(--text-muted)] mt-1">Эффективность партиционирования и показания шума (SPECS §5.1):</p>
       <div className="w-full overflow-x-auto">
       <table className="w-full min-w-[540px] text-left text-xs border-collapse border border-[var(--border-color)] mb-1">
         <thead>
@@ -189,10 +190,10 @@ export const AcademicPanel: React.FC = () => {
         </thead>
         <tbody>
           {[
-            { name: 'TrappedIonPaulTrap', noise: '0.50%', src: 'err_2q=5e-3 (qpu.py)', tag: '[ МОДОВЫЙ СПЕКТР ]', key: 'trapped_ion' },
-            { name: 'SrOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: '[ БЛОКАДА РИДБЕРГА ]', key: 'sr_optical' },
-            { name: 'IBM Eagle', noise: '1.00%', src: 'err_2q=1e-2 (qpu.py)', tag: '[ ФИКСИРОВАННЫЕ СВЯЗКИ ]', key: 'eagle' },
-            { name: 'IBM Heron', noise: '0.70%', src: 'err_2q=7e-3 (qpu.py)', tag: '[ УПРАВЛЯЕМЫЕ СВЯЗКИ ]', key: 'heron' },
+            { name: 'TrappedIonPaulTrap', noise: '0.50%', src: 'err_2q=5e-3 (qpu.py)', tag: 'Модовый спектр', key: 'trapped_ion' },
+            { name: 'SrOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: 'Блокада Ридберга', key: 'sr_optical' },
+            { name: 'IBM Eagle', noise: '1.00%', src: 'err_2q=1e-2 (qpu.py)', tag: 'Фиксированные связки', key: 'eagle' },
+            { name: 'IBM Heron', noise: '0.70%', src: 'err_2q=7e-3 (qpu.py)', tag: 'Управляемые связки', key: 'heron' },
           ].map((row) => {
             const isActive = store.metrics?.platform_type?.includes(row.key);
             const isolVal = isActive && store.metrics?.isolation_index !== undefined
@@ -207,9 +208,11 @@ export const AcademicPanel: React.FC = () => {
                 <td className="p-1.5">{row.name}{isActive ? ' ◀ текущая' : ''}</td>
                 <td className="p-1.5">{row.noise}</td>
                 <td className="p-1.5">{isolVal}</td>
-                <td className="p-1.5 text-[var(--text-muted)] flex gap-1 items-center">
-                  <span>{row.src}</span>
-                  <span className="text-[10px] font-mono opacity-80">{row.tag}</span>
+                <td className="p-1.5 text-[var(--text-muted)]">
+                  <div className="flex gap-1.5 items-center flex-wrap">
+                    <span>{row.src}</span>
+                    <span className="text-[10px] font-mono opacity-80">({row.tag})</span>
+                  </div>
                 </td>
               </tr>
             );
@@ -218,7 +221,7 @@ export const AcademicPanel: React.FC = () => {
       </table>
       </div>
 
-      <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Четыре контура защиты TurtleShell (SPECS §5):</p>
+      <p className="font-bold text-xs text-[var(--text-muted)] mt-1">Четыре контура защиты TurtleShell (SPECS §5):</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>Контур 1</strong> — Физическое разделение (Спектральная кластеризация лапласиана графа L = D - |J|) + LMS-фильтр подавления РЧ-утечки (M=32, µ=0.01, сходимость &lt;10мс, подавление 20-30 дБ).</li>
         <li><strong>Контур 2</strong> — Верификация компилятора: SHA-256 хеш схемы (граф оптимизации + маппинг) + Isolation Forest (n=100, contamination=5%) → порог −0.6.</li>
@@ -229,8 +232,8 @@ export const AcademicPanel: React.FC = () => {
       {renderQuTiPAuditSection(true)}
 
       <div className="border-t border-[var(--border-color)] mt-2 pt-2 flex flex-col gap-1 text-xs text-[var(--text-muted)] font-mono">
-        <span className="font-bold uppercase text-[var(--text-main)]">Автор и Аффилиация:</span>
-        <span>ИГУМНОВ Матвей Дмитриевич (Московский Политех) — ORCID: 0009-0001-7924-1522 | matvei@iqumnov.com</span>
+        <span className="font-bold text-[var(--text-main)]">Автор и аффилиация:</span>
+        <span>Игумнов Матвей Дмитриевич (Московский Политех) — ORCID: 0009-0001-7924-1522 | matvei@iqumnov.com</span>
       </div>
     </div>
   ) : (
@@ -239,7 +242,7 @@ export const AcademicPanel: React.FC = () => {
         This simulator (<strong>TurtleShell-RT</strong>) and benchmarking framework (<strong>Quantum Cloud Isolation Benchmarking Framework</strong>) serve as the reference implementation and benchmarking suite for the open-source quantum process isolation architecture: <span className="underline italic">"TurtleShell: A Multi-Contour Process Isolation Concept for Multi-Tenant Quantum Clouds"</span>.
       </p>
 
-      <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Quantum Physical Platform Classes:</p>
+      <p className="font-bold text-xs text-[var(--text-muted)] mt-1">Quantum physical platform classes:</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>TrappedIonPaulTrap</strong> — Paul trap ion chain with Ca-40/Sr-88/Ba-138/Yb-171 (Leibfried et al. 2003, Deslauriers 2006). T1=1s, T2=0.5s, all-to-all connectivity (J_ij ~ 1/|i-j|³). Threats: Crosstalk, RF leakage side-channel, phonon Prime-and-Probe.</li>
         <li><strong>SrOpticalLattice</strong> — Strontium-87 (87Sr) neutral atoms (~1 µK inside 300K UHV chamber) in 2D optical lattice (Boyd et al. 2007, Saffman 2016). T1=60s, T2=30s. Clock at 4.29×10¹⁴ Hz (698.4 nm). Immune to RF leakage attacks.</li>
@@ -247,7 +250,7 @@ export const AcademicPanel: React.FC = () => {
         <li><strong>IBM Heron</strong> — 133Q superconducting with tunable couplers. T1≈172µs, ZZ≈1.1kHz. After Contour 1 spectral detuning, residual ZZ ≈ 15%.</li>
       </ul>
 
-      <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Partitioning Efficiency & Noise Metrics (SPECS §5.1):</p>
+      <p className="font-bold text-xs text-[var(--text-muted)] mt-1">Partitioning efficiency &amp; noise metrics (SPECS §5.1):</p>
       <div className="w-full overflow-x-auto">
       <table className="w-full min-w-[540px] text-left text-xs border-collapse border border-[var(--border-color)] mb-1">
         <thead>
@@ -260,10 +263,10 @@ export const AcademicPanel: React.FC = () => {
         </thead>
         <tbody>
           {[
-            { name: 'TrappedIonPaulTrap', noise: '0.50%', src: 'err_2q=5e-3 (qpu.py)', tag: '[ MOTIONAL MODES ]', key: 'trapped_ion' },
-            { name: 'SrOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: '[ RYDBERG BLOCKADE ]', key: 'sr_optical' },
-            { name: 'IBM Eagle', noise: '1.00%', src: 'err_2q=1e-2 (qpu.py)', tag: '[ FIXED COUPLERS ]', key: 'eagle' },
-            { name: 'IBM Heron', noise: '0.70%', src: 'err_2q=7e-3 (qpu.py)', tag: '[ TUNABLE COUPLERS ]', key: 'heron' },
+            { name: 'TrappedIonPaulTrap', noise: '0.50%', src: 'err_2q=5e-3 (qpu.py)', tag: 'Motional modes', key: 'trapped_ion' },
+            { name: 'SrOpticalLattice', noise: '1.00%', src: 'err_2q=1e-2 (Rydberg)', tag: 'Rydberg blockade', key: 'sr_optical' },
+            { name: 'IBM Eagle', noise: '1.00%', src: 'err_2q=1e-2 (qpu.py)', tag: 'Fixed couplers', key: 'eagle' },
+            { name: 'IBM Heron', noise: '0.70%', src: 'err_2q=7e-3 (qpu.py)', tag: 'Tunable couplers', key: 'heron' },
           ].map((row) => {
             const isActive = store.metrics?.platform_type?.includes(row.key);
             const isolVal = isActive && store.metrics?.isolation_index !== undefined
@@ -278,9 +281,11 @@ export const AcademicPanel: React.FC = () => {
                 <td className="p-1.5">{row.name}{isActive ? ' ◀ active' : ''}</td>
                 <td className="p-1.5">{row.noise}</td>
                 <td className="p-1.5">{isolVal}</td>
-                <td className="p-1.5 text-[var(--text-muted)] flex gap-1 items-center">
-                  <span>{row.src}</span>
-                  <span className="text-[10px] font-mono opacity-80">{row.tag}</span>
+                <td className="p-1.5 text-[var(--text-muted)]">
+                  <div className="flex gap-1.5 items-center flex-wrap">
+                    <span>{row.src}</span>
+                    <span className="text-[10px] font-mono opacity-80">({row.tag})</span>
+                  </div>
                 </td>
               </tr>
             );
@@ -289,7 +294,7 @@ export const AcademicPanel: React.FC = () => {
       </table>
       </div>
 
-      <p className="font-bold uppercase text-xs text-[var(--text-muted)] mt-1">Four TurtleShell Protection Contours (SPECS §5):</p>
+      <p className="font-bold text-xs text-[var(--text-muted)] mt-1">Four TurtleShell protection contours (SPECS §5):</p>
       <ul className="list-disc pl-4 flex flex-col gap-1.5 text-xs">
         <li><strong>Contour 1</strong> — Physical partitioning (Spectral Clustering on Graph Laplacian L = D - |J|) + LMS adaptive filter for RF leakage suppression (M=32, µ=0.01, convergence &lt;10ms, 20-30 dB suppression).</li>
         <li><strong>Contour 2</strong> — Compiler verification: SHA-256 circuit hash (optimization graph + mapping) + Isolation Forest (n=100, contamination=5%) → threshold −0.6.</li>
@@ -300,8 +305,8 @@ export const AcademicPanel: React.FC = () => {
       {renderQuTiPAuditSection(false)}
 
       <div className="border-t border-[var(--border-color)] mt-2 pt-2 flex flex-col gap-1 text-xs text-[var(--text-muted)] font-mono">
-        <span className="font-bold uppercase text-[var(--text-main)]">Author & Affiliation:</span>
-        <span>Matvei D. IGUMNOV (Moscow Polytech) — ORCID: 0009-0001-7924-1522 | matvei@iqumnov.com</span>
+        <span className="font-bold text-[var(--text-main)]">Author &amp; affiliation:</span>
+        <span>Matvei D. Igumnov (Moscow Polytech) — ORCID: 0009-0001-7924-1522 | matvei@iqumnov.com</span>
       </div>
     </div>
   );
@@ -309,7 +314,7 @@ export const AcademicPanel: React.FC = () => {
   return (
     <div className="w-full hud-panel font-mono text-sm select-text overflow-hidden">
       <div className="hud-header-bar">
-        <span>{lang === 'RU' ? "АКАДЕМИЧЕСКАЯ АРХИТЕКТУРНАЯ СПЕЦИФИКАЦИЯ TURTLESHELL" : "TURTLESHELL ACADEMIC ARCHITECTURAL SPECIFICATION"}</span>
+        <span>{lang === 'RU' ? "Академическая архитектурная спецификация TurtleShell" : "TurtleShell academic architectural specification"}</span>
       </div>
       <div className="p-3.5">
         {content}

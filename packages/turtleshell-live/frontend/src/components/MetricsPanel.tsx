@@ -68,7 +68,7 @@ export const MetricsPanel: React.FC = () => {
   const minFidelity = Math.min(85, ...displayFidelity);
 
   return (
-    <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs select-text">
+    <div className="w-full grid grid-cols-1 xl:grid-cols-3 gap-3 font-mono text-xs select-text">
       {/* Chart 1: Fidelity over time */}
       <div className="hud-panel flex flex-col overflow-hidden">
         <div className="hud-header-bar">
@@ -77,13 +77,13 @@ export const MetricsPanel: React.FC = () => {
         <div className="p-2 flex-1">
           <div className="h-36 w-full bg-[var(--bg-color)]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 30, bottom: 8 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 6, bottom: 8 }}>
                 <XAxis dataKey="label" {...AXIS_PROPS} />
                 <YAxis
                   {...AXIS_PROPS}
                   domain={[Math.floor(minFidelity - 1), 100]}
                   padding={{ top: 10, bottom: 0 }}
-                  width={48}
+                  width={44}
                   tickFormatter={(v) => typeof v === 'number' ? `${v.toFixed(0)}%` : v}
                 />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
@@ -108,13 +108,13 @@ export const MetricsPanel: React.FC = () => {
         <div className="p-2 flex-1">
           <div className="h-36 w-full bg-[var(--bg-color)]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 30, bottom: 8 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 6, bottom: 8 }}>
                 <XAxis dataKey="label" {...AXIS_PROPS} />
                 <YAxis
                   {...AXIS_PROPS}
                   domain={[0, 'auto']}
                   padding={{ top: 12, bottom: 0 }}
-                  width={48}
+                  width={44}
                   tickFormatter={(v) => typeof v === 'number' ? v.toFixed(3) : v}
                 />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
@@ -139,13 +139,13 @@ export const MetricsPanel: React.FC = () => {
         <div className="p-2 flex-1">
           <div className="h-36 w-full bg-[var(--bg-color)]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 30, bottom: 8 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 6, bottom: 8 }}>
                 <XAxis dataKey="label" {...AXIS_PROPS} />
                 <YAxis
                   {...AXIS_PROPS}
                   domain={[0, 'auto']}
                   padding={{ top: 12, bottom: 0 }}
-                  width={48}
+                  width={44}
                   tickFormatter={(v) => typeof v === 'number' ? `${v.toFixed(1)}σ` : v}
                 />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />

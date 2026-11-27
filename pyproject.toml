@@ -30,6 +30,19 @@ dependencies = [
     "click>=8.0"
 ]
 
+[project.optional-dependencies]
+quantum = [
+    "qiskit>=1.0.0",
+    "qiskit-aer>=0.14.0"
+]
+verification = [
+    "qutip>=5.0.0"
+]
+dev = [
+    "pytest>=7.0.0",
+    "httpx>=0.27.0"
+]
+
 [project.scripts]
 qib = "quantum_isolation_benchmark.cli:main"
 

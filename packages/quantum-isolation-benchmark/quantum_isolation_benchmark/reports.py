@@ -33,15 +33,15 @@ def compile_academic_report(results: List[Dict[str, Any]], format_type: str = "m
     )
     
     methodology = (
-        "To audit multi-tenant isolation, we deploy disjoint circuit execution protocols. "
+        "To audit multi-tenant isolation, we deploy disjoint circuit execution protocols.\n"
         "1. **ZZ-Crosstalk Audits**: A reference circuit (3-qubit Grover's Search) is executed on a designated "
-        "qubit partition, while concurrent CZ/CX gate sequences are applied to neighboring 'aggressor' qubits. "
+        "qubit partition, while concurrent CZ/CX gate sequences are applied to neighboring 'aggressor' qubits.\n"
         "2. **Quantum Rowhammer Audits**: High-repetition cyclic excitation loops (100–1000 cycles at 5 MHz) "
-        "are driven on aggressor qubits to monitor localized thermal load and dielectric heating via victim T1/T2 decay. "
+        "are driven on aggressor qubits to monitor localized thermal load and dielectric heating via victim T1/T2 decay.\n"
         "3. **Prime-and-Probe Audits**: We measure state relaxation decay rates by priming a partition and "
-        "introducing varying delay windows (50–500 us) prior to reference probe executions. "
+        "introducing varying delay windows (50–500 us) prior to reference probe executions.\n"
         "4. **Environmental Decoherence Audits**: The chip is audited under simulated temperature sweeps "
-        "to characterize global hardware vulnerability boundaries. "
+        "to characterize global hardware vulnerability boundaries.\n"
         "5. **RF-Leakage Audits**: For RF Paul-trap architectures, side-channel RF emission leakage is evaluated "
         "via Shannon mutual information and receiver decode accuracy across configured SNR levels."
     )

@@ -282,9 +282,17 @@ class IBMProvider(QuantumProvider):
     @staticmethod
     def _pack_parallel_circuits(circuits_with_qubits: List[Tuple[Any, List[int]]]):
         from qiskit import QuantumCircuit
-        total_qubits = max(max(qubits) for _, qubits in circuits_with_qubits) + 1
+        non_empty = [qubits for _, qubits in circuits_with_qubits if qubits]
+        if not non_empty:
+            raise ValueError("circuits_with_qubits must assign at least one physical qubit")
+        total_qubits = max(max(qubits) for qubits in non_empty) + 1
         combined_qc = QuantumCircuit(total_qubits, total_qubits)
         for qc, qubits in circuits_with_qubits:
+            if len(qubits) < qc.num_qubits or len(qubits) < qc.num_clbits:
+                raise ValueError(
+                    f"Circuit requires {qc.num_qubits} qubits / {qc.num_clbits} clbits, "
+                    f"but partition only provides {len(qubits)}"
+                )
             for item in qc.data:
                 instr, qargs, cargs = item.operation, item.qubits, item.clbits
                 new_qargs = [combined_qc.qubits[qubits[qc.find_bit(q).index]] for q in qargs]

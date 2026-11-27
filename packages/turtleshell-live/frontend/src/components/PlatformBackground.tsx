@@ -48,7 +48,7 @@ export const PlatformBackground: React.FC = () => {
         top: '50%',
         left: '-80px',
         transform: 'translateY(-50%)',
-        width: '680px',
+        width: 'min(680px, 95vw)',
         height: '85vh',
         maxHeight: '760px',
         overflow: 'hidden',

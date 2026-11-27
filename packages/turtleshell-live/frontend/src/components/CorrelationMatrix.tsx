@@ -141,8 +141,8 @@ export const CorrelationMatrix: React.FC = () => {
   return (
     <div className="w-full hud-panel flex flex-col font-mono text-xs select-text overflow-hidden">
       <div className="hud-header-bar">
-        <span>{lang === 'RU' ? "МАТРИЦА КОРРЕЛЯЦИИ ТЕЛЕМЕТРИИ" : "TELEMETRY CORRELATION MATRIX"}</span>
-        <span>{lang === 'RU' ? "[ КОРРЕЛЯЦИЯ ПИРСОНА R ]" : "[ PEARSON R ]"}</span>
+        <span>{lang === 'RU' ? "Матрица корреляции телеметрии" : "Telemetry correlation matrix"}</span>
+        <span className="opacity-85 text-[10px]">{lang === 'RU' ? "Корреляция Пирсона R" : "Pearson R"}</span>
       </div>
 
       <div className="p-3 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch flex-1 min-h-0">
@@ -152,7 +152,7 @@ export const CorrelationMatrix: React.FC = () => {
             <div className="grid grid-cols-[minmax(44px,1.1fr)_repeat(5,minmax(0,1fr))] gap-1 mb-1 items-center">
               <div className="text-center font-bold text-[var(--text-muted)] text-[10px]" />
               {variables.map((v) => (
-                <div key={v.key} className="text-center font-bold text-[var(--text-main)] text-[10px] uppercase truncate px-0.5" title={v.label}>
+                <div key={v.key} className="text-center font-bold text-[var(--text-main)] text-[10px] truncate px-0.5" title={v.label}>
                   {v.label}
                 </div>
               ))}
@@ -160,7 +160,7 @@ export const CorrelationMatrix: React.FC = () => {
 
             {variables.map((vRow) => (
               <div key={vRow.key} className="grid grid-cols-[minmax(44px,1.1fr)_repeat(5,minmax(0,1fr))] gap-1 items-center mb-1">
-                <div className="text-right pr-1 font-bold text-[var(--text-main)] text-[10px] uppercase truncate" title={vRow.label}>
+                <div className="text-right pr-1 font-bold text-[var(--text-main)] text-[10px] truncate" title={vRow.label}>
                   {vRow.label}
                 </div>
                 {variables.map((vCol) => {
@@ -201,7 +201,7 @@ export const CorrelationMatrix: React.FC = () => {
         <div className="xl:col-span-4 border border-[var(--border-color)] p-2.5 bg-[var(--bg-color)] flex flex-col justify-between select-text min-w-0">
           {hoveredCell ? (
             <div className="flex flex-col gap-2">
-              <span className="text-xs font-bold text-[var(--text-main)] uppercase border-b border-[var(--border-color)] pb-1">
+              <span className="text-xs font-bold text-[var(--text-main)] border-b border-[var(--border-color)] pb-1">
                 {variables.find((v) => v.key === hoveredCell.x)?.label} vs {variables.find((v) => v.key === hoveredCell.y)?.label}
               </span>
               <div className="text-sm font-bold font-mono text-[var(--text-main)]">
@@ -217,8 +217,8 @@ export const CorrelationMatrix: React.FC = () => {
             </div>
           )}
 
-          <div className="text-[10px] text-[var(--text-muted)] uppercase border-t border-[var(--border-color)] pt-2 font-mono">
-            {lang === 'RU' ? "ПОТОК ТЕЛЕМЕТРИИ В РЕАЛЬНОМ ВРЕМЕНИ" : "LIVE TELEMETRY STREAM"}
+          <div className="text-[10px] text-[var(--text-muted)] border-t border-[var(--border-color)] pt-2 font-mono">
+            {lang === 'RU' ? "Поток телеметрии в реальном времени" : "Live telemetry stream"}
           </div>
         </div>
       </div>

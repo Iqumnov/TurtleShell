@@ -26,7 +26,7 @@ export const ControlPanel: React.FC = () => {
       {/* Platform Configuration */}
       <div className="flex flex-col gap-2.5">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold text-[var(--text-muted)] uppercase">{t.procModelSelect}</label>
+          <label className="text-xs font-bold text-[var(--text-muted)]">{t.procModelSelect}</label>
           <CustomSelect
             value={store.qpuType}
             onChange={(val) => store.setConfigs({ qpuType: val })}
@@ -43,7 +43,7 @@ export const ControlPanel: React.FC = () => {
         {/* Ion Species */}
         {isIonTrap && (
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">{t.ionSpeciesLabel}</label>
+            <label className="text-xs font-bold text-[var(--text-muted)]">{t.ionSpeciesLabel}</label>
             <CustomSelect
               value={store.ionSpecies}
               onChange={(val) => store.setConfigs({ ionSpecies: val })}
@@ -67,6 +67,7 @@ export const ControlPanel: React.FC = () => {
             </div>
             <input
               type="range"
+              aria-label={t.nIonsLabel}
               min="10"
               max="50"
               step="5"
@@ -84,6 +85,7 @@ export const ControlPanel: React.FC = () => {
           </div>
           <input
             type="range"
+            aria-label={t.colocatedTenants}
             min="2"
             max="10"
             value={store.tenantCount}
@@ -93,7 +95,7 @@ export const ControlPanel: React.FC = () => {
 
         {/* Scheduler Type */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold text-[var(--text-muted)] uppercase">{t.placementAlgo}</label>
+          <label className="text-xs font-bold text-[var(--text-muted)]">{t.placementAlgo}</label>
           <CustomSelect
             value={store.schedulingAlgo}
             onChange={(val) => store.setConfigs({ schedulingAlgo: val })}
@@ -112,7 +114,7 @@ export const ControlPanel: React.FC = () => {
       {/* Attack Scenario Configuration */}
       <div className="flex flex-col gap-2.5 border-t border-[var(--border-color)] pt-2.5">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold text-[var(--text-muted)] uppercase">{t.vulnerabilityProfile}</label>
+          <label className="text-xs font-bold text-[var(--text-muted)]">{t.vulnerabilityProfile}</label>
           <CustomSelect
             value={store.activeScenario}
             onChange={(val) => store.setConfigs({ activeScenario: val })}
@@ -137,6 +139,7 @@ export const ControlPanel: React.FC = () => {
               </div>
               <input
                 type="range"
+                aria-label={t.crosstalkCzIntensity}
                 min="0"
                 max="100"
                 value={store.crosstalkIntensity}
@@ -150,6 +153,7 @@ export const ControlPanel: React.FC = () => {
               </div>
               <input
                 type="range"
+                aria-label={t.gateFrequencyLabel}
                 min="100000"
                 max="10000000"
                 step="100000"
@@ -169,6 +173,7 @@ export const ControlPanel: React.FC = () => {
             </div>
             <input
               type="range"
+              aria-label={t.rowhammerIterations}
               min="100"
               max="1000"
               value={store.rowhammerIterations}
@@ -186,6 +191,7 @@ export const ControlPanel: React.FC = () => {
             </div>
             <input
               type="range"
+              aria-label={t.measurementDelay}
               min="50"
               max="500"
               value={store.primeDelayUs}
@@ -203,6 +209,7 @@ export const ControlPanel: React.FC = () => {
             </div>
             <input
               type="range"
+              aria-label={t.snrDbLabel}
               min="-30"
               max="20"
               step="1"
@@ -226,6 +233,7 @@ export const ControlPanel: React.FC = () => {
             </div>
             <input
               type="range"
+              aria-label={t.cryostatTemp}
               min="15"
               max="50"
               value={store.envTemperatureMk}
@@ -238,39 +246,47 @@ export const ControlPanel: React.FC = () => {
       {/* TurtleShell Protection Contours */}
       <div className="flex flex-col gap-2 border-t border-[var(--border-color)] pt-2.5">
         <button
+          type="button"
+          aria-pressed={store.defenseL1}
           onClick={() => handleToggleDefense(1)}
           className={`w-full hud-button justify-between text-left py-1.5 px-2 text-xs border ${store.defenseL1 ? 'hud-button-active' : ''
             }`}
         >
           <span className="font-bold text-xs">{t.defL1Title}</span>
-          <span className="font-mono text-xs">{store.defenseL1 ? (lang === 'RU' ? '[ВКЛ]' : '[ON]') : (lang === 'RU' ? '[ВЫКЛ]' : '[OFF]')}</span>
+          <span className="font-mono text-xs">{store.defenseL1 ? (lang === 'RU' ? 'Вкл' : 'On') : (lang === 'RU' ? 'Выкл' : 'Off')}</span>
         </button>
 
         <button
+          type="button"
+          aria-pressed={store.defenseL2}
           onClick={() => handleToggleDefense(2)}
           className={`w-full hud-button justify-between text-left py-1.5 px-2 text-xs border ${store.defenseL2 ? 'hud-button-active' : ''
             }`}
         >
           <span className="font-bold text-xs">{t.defL2Title}</span>
-          <span className="font-mono text-xs">{store.defenseL2 ? (lang === 'RU' ? '[ВКЛ]' : '[ON]') : (lang === 'RU' ? '[ВЫКЛ]' : '[OFF]')}</span>
+          <span className="font-mono text-xs">{store.defenseL2 ? (lang === 'RU' ? 'Вкл' : 'On') : (lang === 'RU' ? 'Выкл' : 'Off')}</span>
         </button>
 
         <button
+          type="button"
+          aria-pressed={store.defenseL3}
           onClick={() => handleToggleDefense(3)}
           className={`w-full hud-button justify-between text-left py-1.5 px-2 text-xs border ${store.defenseL3 ? 'hud-button-active' : ''
             }`}
         >
           <span className="font-bold text-xs">{t.defL3Title}</span>
-          <span className="font-mono text-xs">{store.defenseL3 ? (lang === 'RU' ? '[ВКЛ]' : '[ON]') : (lang === 'RU' ? '[ВЫКЛ]' : '[OFF]')}</span>
+          <span className="font-mono text-xs">{store.defenseL3 ? (lang === 'RU' ? 'Вкл' : 'On') : (lang === 'RU' ? 'Выкл' : 'Off')}</span>
         </button>
 
         <button
+          type="button"
+          aria-pressed={store.defenseL4}
           onClick={() => handleToggleDefense(4)}
           className={`w-full hud-button justify-between text-left py-1.5 px-2 text-xs border ${store.defenseL4 ? 'hud-button-active' : ''
             }`}
         >
           <span className="font-bold text-xs">{t.defL4Title}</span>
-          <span className="font-mono text-xs">{store.defenseL4 ? (lang === 'RU' ? '[ВКЛ]' : '[ON]') : (lang === 'RU' ? '[ВЫКЛ]' : '[OFF]')}</span>
+          <span className="font-mono text-xs">{store.defenseL4 ? (lang === 'RU' ? 'Вкл' : 'On') : (lang === 'RU' ? 'Выкл' : 'Off')}</span>
         </button>
       </div>
     </div>

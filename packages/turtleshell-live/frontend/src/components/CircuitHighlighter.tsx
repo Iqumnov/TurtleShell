@@ -136,7 +136,7 @@ export const CircuitHighlighter: React.FC = () => {
     if (activeScenario === 'rowhammer') {
       const active = store.defenseL3;
       return {
-        label: isRu ? "КОНТУР 3: БУФЕР ЛАЗЕРНОГО ОХЛАЖДЕНИЯ" : "CONTOUR 3: LASER COOLING BUFFER",
+        label: isRu ? "Контур 3: Буфер лазерного охлаждения" : "Contour 3: Laser cooling buffer",
         text: active
           ? (isRu ? "Контур 3 активен: Буфер лазерного охлаждения τ_б вставлен в схему. Тепловой резонанс и сбои когерентности T1/T2 предотвращены." : "Contour 3 active: Laser cooling buffer τ_b inserted into schedule. Thermal resonance and T1/T2 degradation prevented.")
           : (isRu ? "Буфер охлаждения отключен: Циклическая активация шины вызовет термический Rowhammer. Включите Контур 3 для защиты." : "Cooling buffer disabled: Cyclical bus excitation will cause thermal Rowhammer. Enable Contour 3 to protect coherence.")
@@ -145,7 +145,7 @@ export const CircuitHighlighter: React.FC = () => {
     if (activeScenario === 'prime_probe') {
       const active = store.defenseL3 || store.defenseL4;
       return {
-        label: isRu ? "КОНТУР 3/4: ОХЛАЖДЕНИЕ И ТЕЛЕМЕТРИЧЕСКАЯ ИЗОЛЯЦИЯ" : "CONTOUR 3/4: COOLING & TELEMETRY ISOLATION",
+        label: isRu ? "Контур 3/4: Охлаждение и телеметрическая изоляция" : "Contour 3/4: Cooling & telemetry isolation",
         text: active
           ? (isRu ? "Защита активна: Сброс фононного состояния Контура 3 и мониторинг Контура 4 блокируют боковой канал Prime-and-Probe." : "Protection active: Contour 3 phonon state reset and Contour 4 telemetry isolation block Prime-and-Probe side-channel.")
           : (isRu ? "Защита отключена: Остаточные фононные состояния раскрывают последовательности выполнения. Включите Контур 3 или 4." : "Protection disabled: Residual phonon excitations expose execution sequence. Enable Contour 3 or 4.")
@@ -154,7 +154,7 @@ export const CircuitHighlighter: React.FC = () => {
     if (activeScenario === 'rf_leakage') {
       const active = store.defenseL1;
       return {
-        label: isRu ? "КОНТУР 1: LMS-ФИЛЬТР ПОДАВЛЕНИЯ РЧ" : "CONTOUR 1: LMS RF NOISE FILTER",
+        label: isRu ? "Контур 1: LMS-фильтр подавления РЧ" : "Contour 1: LMS RF noise filter",
         text: active
           ? (isRu ? "Контур 1 активен: Адаптивный LMS-фильтр подавил паразитные РЧ-эмиссии на 20-30 дБ." : "Contour 1 active: Adaptive LMS filter suppressed parasitic RF side-channel emissions by 20-30 dB.")
           : (isRu ? "Фильтр РЧ отключен: Модуляция частоты ловушки подвержена перехвату приёмником. Включите Контур 1." : "RF filter disabled: Trap frequency modulation is vulnerable to receiver decoding. Enable Contour 1.")
@@ -173,25 +173,25 @@ export const CircuitHighlighter: React.FC = () => {
     <div className="w-full hud-panel flex flex-col font-mono text-xs select-text overflow-hidden">
       <div className="hud-header-bar">
         <span>{t.openqasmAuditTitle}</span>
-        <span>[ {title} ]</span>
+        <span className="opacity-85 text-[10px]">{title}</span>
       </div>
       
       {/* Code Display Area */}
-      <div className="bg-[var(--bg-color)] border border-[var(--border-color)] p-3 flex-1 overflow-y-auto text-xs text-[var(--text-main)] leading-relaxed select-text flex flex-col gap-1 m-3">
+      <div className="bg-[var(--bg-color)] border border-[var(--border-color)] p-3 flex-1 overflow-y-auto overflow-x-auto text-xs text-[var(--text-main)] leading-relaxed select-text flex flex-col gap-1 m-3">
         {lines.map((l: CodeLine, idx: number) => (
           <div
             key={idx}
-            className={`font-mono text-xs flex flex-wrap justify-between items-center py-0.5 px-1 ${
+            className={`font-mono text-xs flex flex-wrap justify-between items-baseline gap-x-3 gap-y-0.5 py-0.5 px-1 ${
               l.isVulnerable ? 'bg-[var(--inset-bg)] border-l-2 border-[var(--border-bright)] font-bold' : ''
             } ${l.isMitigated ? 'border-l-2 border-[var(--border-color)]' : ''}`}
           >
-            <div className="flex items-center gap-2 truncate">
-              <span className="text-[var(--text-muted)] text-xs w-5 text-right select-none">{l.lineNum}</span>
-              <span className="text-xs">{l.code}</span>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <span className="text-[var(--text-muted)] text-xs w-5 text-right select-none flex-shrink-0">{l.lineNum}</span>
+              <span className="text-xs break-words">{l.code}</span>
             </div>
 
             {l.comment && (
-              <span className="text-xs text-[var(--text-muted)] italic font-sans font-semibold">
+              <span className="text-xs text-[var(--text-muted)] italic font-sans font-semibold break-words">
                 // {l.comment}
               </span>
             )}
@@ -201,7 +201,7 @@ export const CircuitHighlighter: React.FC = () => {
 
       {/* Verification Status Banner */}
       <div className="p-2.5 hud-inset flex flex-col gap-1 text-xs leading-tight">
-        <span className="font-bold text-xs uppercase text-[var(--text-muted)]">{statusContent.label}:</span>
+        <span className="font-bold text-xs text-[var(--text-muted)]">{statusContent.label}:</span>
         <span className="text-[var(--text-main)] text-xs leading-normal">
           {statusContent.text}
         </span>

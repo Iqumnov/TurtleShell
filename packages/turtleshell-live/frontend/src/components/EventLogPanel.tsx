@@ -11,6 +11,7 @@ export const EventLogPanel: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const lastStepRef = useRef<number>(0);
   const lastQpuRef = useRef<string | undefined>(undefined);
+  const lastLangRef = useRef<'EN' | 'RU'>(lang);
   const isIonTrap = metrics?.platform_type?.includes('trapped_ion');
 
   const timeStep = metrics?.time_step;
@@ -26,6 +27,8 @@ export const EventLogPanel: React.FC = () => {
 
   useEffect(() => {
     if (timeStep === undefined) return;
+    const langChanged = lastLangRef.current !== lang;
+    lastLangRef.current = lang;
     const isReset = timeStep < lastStepRef.current || (lastQpuRef.current !== undefined && lastQpuRef.current !== platformType);
     lastStepRef.current = timeStep;
     lastQpuRef.current = platformType;
@@ -38,48 +41,48 @@ export const EventLogPanel: React.FC = () => {
     if (flaggedL2) {
       nextLogs.push(
         isRu
-          ? `[${timestamp}] [C2] АНОМАЛИЯ: целостность компиляции (довер. ${(scoreL2 * 100).toFixed(1)}%)`
-          : `[${timestamp}] [C2] ANOMALY: SHA-256 mismatch (conf ${(scoreL2 * 100).toFixed(1)}%)`
+          ? `${timestamp} · C2 · Аномалия: целостность компиляции (довер. ${(scoreL2 * 100).toFixed(1)}%)`
+          : `${timestamp} · C2 · Anomaly: SHA-256 mismatch (conf ${(scoreL2 * 100).toFixed(1)}%)`
       );
     }
     if (store.defenseL3 && timeStep % 10 === 0) {
       if (isIonTrap) {
         nextLogs.push(
           isRu
-            ? `[${timestamp}] [C3] охлаждение: тау=${coolingTauS?.toFixed(3) ?? '?'} с`
-            : `[${timestamp}] [C3] cooling: tau=${coolingTauS?.toFixed(3) ?? '?'} s`
+            ? `${timestamp} · C3 · охлаждение: тау=${coolingTauS?.toFixed(3) ?? '?'} с`
+            : `${timestamp} · C3 · cooling: tau=${coolingTauS?.toFixed(3) ?? '?'} s`
         );
       } else {
         nextLogs.push(
           isRu
-            ? `[${timestamp}] [C3] задержка сброса T1: ${bufferDelayUs} мкс`
-            : `[${timestamp}] [C3] T1 reset delay: ${bufferDelayUs} us`
+            ? `${timestamp} · C3 · задержка сброса T1: ${bufferDelayUs} мкс`
+            : `${timestamp} · C3 · T1 reset delay: ${bufferDelayUs} us`
         );
       }
     }
     if (threatLevel >= 2) {
       nextLogs.push(
         isRu
-          ? `[${timestamp}] [C4] УГРОЗА У${threatLevel}: z-счёт=${zScore?.toFixed(2)}`
-          : `[${timestamp}] [C4] THREAT L${threatLevel}: z-score=${zScore?.toFixed(2)}`
+          ? `${timestamp} · C4 · Угроза L${threatLevel}: z-счёт=${zScore?.toFixed(2)}`
+          : `${timestamp} · C4 · Threat L${threatLevel}: z-score=${zScore?.toFixed(2)}`
       );
     } else if (flaggedL4 && (lossL4 ?? 0) > 0.08) {
       nextLogs.push(
         isRu
-          ? `[${timestamp}] [C4] АНОМАЛИЯ АВТОКОДИРОВЩИКА: потери=${lossL4?.toFixed(4)}`
-          : `[${timestamp}] [C4] AUTOENCODER ANOMALY: loss=${lossL4?.toFixed(4)}`
+          ? `${timestamp} · C4 · Аномалия автокодировщика: потери=${lossL4?.toFixed(4)}`
+          : `${timestamp} · C4 · Autoencoder anomaly: loss=${lossL4?.toFixed(4)}`
       );
     }
 
-    if (isReset) {
+    if (isReset || langChanged) {
       setLogs(nextLogs.slice(0, 25));
       return;
     }
 
     if (nextLogs.length > 0) {
       setLogs((prev) => {
-        const prevPayloads = new Set(prev.map((p) => p.replace(/^\[.*?\]\s*/, '')));
-        const unique = nextLogs.filter((n) => !prevPayloads.has(n.replace(/^\[.*?\]\s*/, '')));
+        const recentPayloads = new Set(prev.slice(0, 5).map((p) => p.replace(/^\S+\s*·\s*/, '')));
+        const unique = nextLogs.filter((n) => !recentPayloads.has(n.replace(/^\S+\s*·\s*/, '')));
         if (unique.length === 0) return prev;
         return [...unique, ...prev].slice(0, 25);
       });
@@ -101,7 +104,7 @@ export const EventLogPanel: React.FC = () => {
   ]);
 
   return (
-    <div className="w-full h-[380px] hud-panel flex flex-col font-mono text-xs select-text overflow-hidden">
+    <div className="w-full min-h-[340px] h-full max-h-[460px] hud-panel flex flex-col font-mono text-xs select-text overflow-hidden">
       <div className="hud-header-bar">
         <span>{t.systemEventLog}</span>
       </div>

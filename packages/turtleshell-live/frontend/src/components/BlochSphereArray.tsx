@@ -47,7 +47,7 @@ export const BlochSphereArray: React.FC = () => {
   if (!metrics || !metrics.qpu) {
     return (
       <div className="w-full text-center text-[var(--text-muted)] font-mono text-xs p-6">
-        {lang === 'RU' ? 'ОЖИДАНИЕ ДАННЫХ СПИНОВОГО СОСТОЯНИЯ КУБИТОВ...' : 'AWAITING QUBIT SPIN STATE DATA...'}
+        {lang === 'RU' ? 'Ожидание данных спинового состояния кубитов...' : 'Awaiting qubit spin state data...'}
       </div>
     );
   }
@@ -67,7 +67,7 @@ export const BlochSphereArray: React.FC = () => {
     : 0.94;
   const displayFidelityDrop = isScrubbing
     ? Math.max(0.0, (baseBenchFidelity - displayFidelity) * 100.0)
-    : Math.max(0.0, Math.abs(metrics.fidelity_drop ?? 0));
+    : Math.max(0.0, metrics.fidelity_drop ?? 0);
   const activeQubitsList = activeQpu?.qubits ?? [];
   const displayAvgT1 = isScrubbing && activeQubitsList.length > 0
     ? activeQubitsList.reduce((acc, q) => acc + q.t1, 0) / activeQubitsList.length
@@ -101,17 +101,24 @@ export const BlochSphereArray: React.FC = () => {
   if (qubits.length === 0) {
     return (
       <div className="w-full text-center text-[var(--text-muted)] font-mono text-xs p-6">
-        AWAITING QUBIT SPIN STATE DATA...
+        {lang === 'RU' ? 'Ожидание данных спинового состояния кубитов...' : 'Awaiting qubit spin state data...'}
       </div>
     );
   }
 
-  const qVictim = qubits.find(q => q.active_tenant === 0) || qubits[0];
-  const qAggressor = qubits.find(q => q.active_tenant === 1) || qubits[1] || qubits[0];
-  const qNeighbor = qubits.find(q => q.active_tenant === 2) || qubits[2] || qubits[0];
-  const freeQubit = qubits.find(q => q.active_tenant === null);
-  const qIdle = freeQubit || qubits[3] || qubits[0];
+  const usedIds = new Set<number>();
+  const pickUnique = (pred: (q: QubitState) => boolean): QubitState => {
+    const match = qubits.find((q) => pred(q) && !usedIds.has(q.id));
+    const fallback = match ?? qubits.find((q) => !usedIds.has(q.id)) ?? qubits[0];
+    usedIds.add(fallback.id);
+    return fallback;
+  };
+  const qVictim = pickUnique((q) => q.active_tenant === 0);
+  const qAggressor = pickUnique((q) => q.active_tenant === 1);
+  const qNeighbor = pickUnique((q) => q.active_tenant === 2);
+  const qIdle = pickUnique((q) => q.active_tenant === null);
 
+  const isLight = store.theme === 'light';
   const t0Label = lang === 'RU' ? 'T0 Жертва' : 'T0 Victim';
   const t1Label = lang === 'RU' ? 'T1 Агрессор' : 'T1 Aggressor';
   const t2Label = lang === 'RU' ? 'T2 Сосед' : 'T2 Neighbor';
@@ -123,10 +130,10 @@ export const BlochSphereArray: React.FC = () => {
     q.active_tenant !== null ? `T${q.active_tenant}` : idleLabel;
 
   const inspectQubits = [
-    { qRef: qVictim, label: `Q${qVictim.id} ${roleLabel(qVictim)}`, isIdle: qVictim.active_tenant === null, color: getTenantColor(qVictim.active_tenant) },
-    { qRef: qAggressor, label: `Q${qAggressor.id} ${roleLabel(qAggressor)}`, isIdle: qAggressor.active_tenant === null, color: getTenantColor(qAggressor.active_tenant) },
-    { qRef: qNeighbor, label: `Q${qNeighbor.id} ${roleLabel(qNeighbor)}`, isIdle: qNeighbor.active_tenant === null, color: getTenantColor(qNeighbor.active_tenant) },
-    { qRef: qIdle, label: `Q${qIdle.id} ${roleLabel(qIdle)}`, isIdle: qIdle.active_tenant === null, color: getTenantColor(qIdle.active_tenant) }
+    { qRef: qVictim, label: `Q${qVictim.id} ${roleLabel(qVictim)}`, isIdle: qVictim.active_tenant === null, color: getTenantColor(qVictim.active_tenant, isLight) },
+    { qRef: qAggressor, label: `Q${qAggressor.id} ${roleLabel(qAggressor)}`, isIdle: qAggressor.active_tenant === null, color: getTenantColor(qAggressor.active_tenant, isLight) },
+    { qRef: qNeighbor, label: `Q${qNeighbor.id} ${roleLabel(qNeighbor)}`, isIdle: qNeighbor.active_tenant === null, color: getTenantColor(qNeighbor.active_tenant, isLight) },
+    { qRef: qIdle, label: `Q${qIdle.id} ${roleLabel(qIdle)}`, isIdle: qIdle.active_tenant === null, color: getTenantColor(qIdle.active_tenant, isLight) }
   ];
 
   const scrubbedZ = isScrubbing ? (history.zScore[clampedScrub] ?? 0) : (metrics.monitor_z_score ?? 0);
@@ -139,8 +146,14 @@ export const BlochSphereArray: React.FC = () => {
   const threatLabel = threatLevel === 0 && !isAnomalyL4 ? t.threatLevelNone : (threatLabels[threatLevel] ?? t.threatLevelNone);
   const cleanThreatLabel = threatLabel.replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, '');
 
+  const baselineT2Ratio = store.qpuType.includes('trapped_ion') || store.qpuType.includes('sr_optical')
+    ? 0.5
+    : store.qpuType.includes('heron')
+    ? 115.0 / 172.0
+    : 96.0 / 148.0;
+
   return (
-    <div className="w-full min-h-[520px] hud-panel p-4 flex flex-col sm:flex-row gap-5 font-mono text-xs select-text">
+    <div className="w-full min-h-0 lg:min-h-[520px] hud-panel p-4 flex flex-col xl:flex-row gap-5 font-mono text-xs select-text">
       
       {/* Left Column: Enlarged Bloch Spheres Grid (160x160) */}
       <div className="flex-1 grid grid-cols-2 gap-4 items-center justify-items-center">
@@ -152,7 +165,7 @@ export const BlochSphereArray: React.FC = () => {
 
           if (!iq.isIdle && q) {
             const cohRatio = Math.max(0.0, Math.min(1.0, displayFidelity / baseBenchFidelity));
-            const t2Health = q.t1 > 0 ? Math.max(0.15, Math.min(1.0, q.t2 / (1.0 * q.t1))) : 1.0;
+            const t2Health = q.t1 > 0 ? Math.max(0.15, Math.min(1.0, q.t2 / (baselineT2Ratio * q.t1 * 0.95))) : 1.0;
             const theta_phase = (q.gate_count * 0.25) + (activeStep * 0.12);
             theta = (Math.PI / 4) + (Math.PI / 4) * Math.sin(theta_phase + q.id) * cohRatio;
             mag = Math.max(0.08, Math.min(1.0, cohRatio * (0.75 + 0.25 * t2Health)));
@@ -204,44 +217,44 @@ export const BlochSphereArray: React.FC = () => {
       </div>
 
       {/* Right Column: Real-time Telemetry Metrics Column */}
-      <div className="w-full sm:w-52 flex flex-col gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border-color)] pt-3 sm:pt-0 sm:pl-4 justify-center">
+      <div className="w-full xl:w-52 flex flex-col gap-3 border-t xl:border-t-0 xl:border-l border-[var(--border-color)] pt-3 xl:pt-0 xl:pl-4 justify-center">
         <div className="p-2.5 hud-inset flex flex-col gap-1">
-          <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.fidelity}</span>
+          <span className="text-xs text-[var(--text-muted)] font-bold">{t.fidelity}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
             {(displayFidelity * 100).toFixed(2)}%
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
-          <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.fidelityDrop}</span>
+          <span className="text-xs text-[var(--text-muted)] font-bold">{t.fidelityDrop}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
             -{displayFidelityDrop.toFixed(2)}%
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
-          <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.avgT1}</span>
+          <span className="text-xs text-[var(--text-muted)] font-bold">{t.avgT1}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
             {fmtTime(displayAvgT1, lang === 'RU')}
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
-          <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.avgT2}</span>
+          <span className="text-xs text-[var(--text-muted)] font-bold">{t.avgT2}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
             {fmtTime(displayAvgT2, lang === 'RU')}
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
-          <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.rfLeakageDb}</span>
+          <span className="text-xs text-[var(--text-muted)] font-bold">{t.rfLeakageDb}</span>
           <span className="text-base font-bold font-mono text-[var(--text-main)]">
             {displayRfDb.toFixed(1)} {lang === 'RU' ? 'дБм' : 'dBm'}
           </span>
         </div>
 
         <div className="p-2.5 hud-inset flex flex-col gap-1">
-          <span className="text-xs text-[var(--text-muted)] uppercase font-bold">{t.threatLevel}</span>
+          <span className="text-xs text-[var(--text-muted)] font-bold">{t.threatLevel}</span>
           <span className="text-xs font-bold font-mono text-[var(--text-main)]">
             {cleanThreatLabel}
           </span>

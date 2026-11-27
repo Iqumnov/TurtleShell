@@ -5,7 +5,31 @@ from app.simulation.qpu import Qubit, Coupler, VirtualQPU
 from app.simulation.scheduler import MultiTenantScheduler
 from app.simulation.scenarios import SimulationScenarios
 from app.simulation.defense import LMSFilter, LaserCoolingBuffer, DifferentialMonitor
-from app.main import sim, run_single_simulation_tick, connected_clients
+from app.main import sim, sim_lock, run_single_simulation_tick, connected_clients
+
+
+@pytest.fixture(autouse=True)
+def restore_default_sim_state():
+    yield
+    with sim_lock:
+        sim.qpu_type = "eagle"
+        sim.ion_species = "Ca40"
+        sim.n_ions = 20
+        sim.tenant_count = 3
+        sim.scheduling_algo = "random"
+        sim.active_scenario = "crosstalk"
+        sim.crosstalk_intensity = 50.0
+        sim.gate_frequency_hz = 1e6
+        sim.rowhammer_iterations = 600
+        sim.prime_delay_us = 100.0
+        sim.env_temperature_mk = 15.0
+        sim.snr_db = -10.0
+        sim.defense_l1 = False
+        sim.defense_l2 = False
+        sim.defense_l3 = False
+        sim.defense_l4 = False
+        sim.playback_speed = 1.0
+        sim.rebuild_qpu()
 
 
 def test_qpu_and_qubit_repr_methods():

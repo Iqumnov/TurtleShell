@@ -1,8 +1,14 @@
 import os
+import re
 import sys
 import click
 import json
 from typing import List
+
+
+def _sanitize_slug(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip()).strip("._-")
+    return cleaned or "default"
 
 from .providers.ibm import IBMProvider
 from .providers.google import GoogleProvider
@@ -75,7 +81,10 @@ def recon(provider, backend, api_key, endpoint, live):
             "calibration": cal
         }
         
-        output_file = f"recon_{provider}_{backend}.json"
+        output_file = f"recon_{_sanitize_slug(provider)}_{_sanitize_slug(backend)}.json"
+        out_dir = os.path.dirname(os.path.abspath(output_file))
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
         with open(output_file, "w") as f:
             json.dump(result, f, indent=2)
         click.echo(f"[+] Full recon metadata successfully written to: {output_file}")
@@ -89,9 +98,10 @@ def recon(provider, backend, api_key, endpoint, live):
 @click.option("--test-qubits", required=True, help="Comma-separated IDs of aggressor test qubits (e.g. 15,16,17)")
 @click.option("--ref-qubits", required=True, help="Comma-separated IDs of reference qubits (e.g. 45,46,47)")
 @click.option("--intensity", default="high", type=click.Choice(["low", "medium", "high"]), help="Workload duration/frequency")
+@click.option("-o", "--output", default=None, help="Optional path to write JSON audit output")
 @click.option("--api-key", default=None)
 @click.option("--live", is_flag=True)
-def crosstalk(provider, backend, test_qubits, ref_qubits, intensity, api_key, live):
+def crosstalk(provider, backend, test_qubits, ref_qubits, intensity, output, api_key, live):
     """Evaluates cross-coupling (ZZ-crosstalk) interference between active partitions."""
     mock = not live
     try:
@@ -106,7 +116,10 @@ def crosstalk(provider, backend, test_qubits, ref_qubits, intensity, api_key, li
         click.echo(f"[+] Parallel Fidelity: {res['parallel_fidelity']:.4f}")
         click.echo(f"[+] Fidelity Degradation: {res['fidelity_drop_pct']}% at a distance of {res['shortest_path_hops']} hops.")
         
-        output_file = f"crosstalk_{provider}_{backend}.json"
+        output_file = output or f"crosstalk_{_sanitize_slug(provider)}_{_sanitize_slug(backend)}.json"
+        out_dir = os.path.dirname(os.path.abspath(output_file))
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
         with open(output_file, "w") as f:
             json.dump(res, f, indent=2)
         click.echo(f"[+] Audit results logged to: {output_file}")
@@ -217,6 +230,9 @@ def benchmark(provider, scenario, output, tenants, live):
     fmt = "html" if output.lower().endswith(".html") else "markdown"
     report_content = compile_academic_report(results, format_type=fmt)
     
+    out_dir = os.path.dirname(os.path.abspath(output))
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     with open(output, "w", encoding="utf-8") as f:
         f.write(report_content)
         
@@ -253,8 +269,11 @@ def schedule(platform, tenants, algo):
         if algo == "tdm":
             demands = {i: total_q if i == 0 else 0 for i in range(tenants)}
         else:
-            share = max(1, total_q // tenants)
-            demands = {i: share for i in range(tenants)}
+            base_share, rem = divmod(total_q, tenants)
+            demands = {
+                i: max(1, base_share + (1 if i < rem else 0)) if total_q >= tenants else 1
+                for i in range(tenants)
+            }
         allocations = sched.execute_allocation(algo, demands, defense_l1_active=(algo == "spectral"))
         iso_index = qpu.compute_isolation_index(allocations, defense_l1_active=(algo == "spectral"))
         

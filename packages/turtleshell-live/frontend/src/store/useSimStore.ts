@@ -160,20 +160,37 @@ const USE_PROXY = import.meta.env.VITE_USE_PROXY === 'true';
 
 const isLocalHost = (): boolean =>
   typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '::1' ||
+    window.location.hostname === '[::1]');
 
-const getBackendHttpUrl = (path: string): string => {
+export const canConnectToBackend = (): boolean => isLocalHost() || USE_PROXY;
+
+const formatBackendHost = (): string => {
+  if (typeof window === 'undefined' || !window.location.hostname || window.location.hostname === 'localhost') {
+    return '127.0.0.1:8000';
+  }
+  const host = window.location.hostname;
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]:8000` : `${host}:8000`;
+};
+
+const BACKEND_URL = formatBackendHost();
+
+export const getBackendHttpUrl = (path: string): string => {
   if (USE_PROXY) return path;
   return `http://${BACKEND_URL}${path}`;
 };
 
-const getBackendWsUrl = (path: string): string => {
+export const getBackendWsUrl = (path: string): string => {
   if (USE_PROXY && typeof window !== 'undefined') {
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProto}//${window.location.host}${path}`;
   }
   return `ws://${BACKEND_URL}${path}`;
 };
+
+let inFlightConfigSyncs = 0;
 
 const pushMetrics = (set: any, data: SimMetrics) => {
   set((state: SimStore) => {
@@ -237,10 +254,6 @@ const stopClientSimulation = () => {
     clientTimer = null;
   }
 };
-
-const BACKEND_URL = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost')
-  ? `${window.location.hostname}:8000`
-  : "127.0.0.1:8000";
 
 const DEFAULT_ENGINE_CONFIG = {
   qpuType: "eagle",
@@ -365,6 +378,12 @@ export const useSimStore = create<SimStore>()(
       });
     } else {
       clientEngine.updateConfig(configs);
+      const affectsPhysics = Object.keys(configs).some(
+        (k) => k !== 'language' && k !== 'theme' && k !== 'playbackSpeed'
+      );
+      if (affectsPhysics && (!ws || ws.readyState !== WebSocket.OPEN) && prev.scrubIndex === null) {
+        pushMetrics(set, clientEngine.tick());
+      }
     }
     if (configs.playbackSpeed !== undefined && clientTimer) {
       scheduleClientInterval(set, get);
@@ -397,6 +416,7 @@ export const useSimStore = create<SimStore>()(
       utilization: state.utilization,
       playback_speed: state.playbackSpeed,
     };
+    inFlightConfigSyncs += 1;
     try {
       await fetch(getBackendHttpUrl('/api/simulation/configure'), {
         method: "POST",
@@ -405,6 +425,8 @@ export const useSimStore = create<SimStore>()(
       });
     } catch (e) {
       // Backend not running on port 8000; client simulation handles execution
+    } finally {
+      inFlightConfigSyncs = Math.max(0, inFlightConfigSyncs - 1);
     }
   },
 
@@ -445,8 +467,13 @@ export const useSimStore = create<SimStore>()(
       };
 
       ws.onmessage = (event) => {
-        const data: SimMetrics = JSON.parse(event.data);
-        pushMetrics(set, data);
+        if (inFlightConfigSyncs > 0) return;
+        try {
+          const data: SimMetrics = JSON.parse(event.data);
+          pushMetrics(set, data);
+        } catch {
+          // Ignore malformed telemetry frame
+        }
       };
 
       ws.onclose = () => {
@@ -538,6 +565,31 @@ export const useSimStore = create<SimStore>()(
         language: state.language,
         theme: state.theme,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        if (typeof document !== 'undefined') {
+          document.documentElement.setAttribute('data-theme', state.theme);
+          document.documentElement.lang = state.language === 'RU' ? 'ru' : 'en';
+        }
+        clientEngine.updateConfig(state);
+        clientEngine.reset();
+        const fresh = clientEngine.tick();
+        useSimStore.setState({
+          metrics: fresh,
+          scrubIndex: null,
+          history: {
+            fidelity: [fresh.fidelity * 100],
+            savings: [fresh.cumulative_savings],
+            costs: [fresh.cumulative_costs],
+            wastedCash: [fresh.cumulative_wasted_cash ?? 0],
+            lossL4: [fresh.autoencoder_loss_l4],
+            labels: [`#${fresh.time_step}`],
+            qpu: [fresh.qpu],
+            zScore: [fresh.monitor_z_score ?? 0],
+            phonon: [fresh.phonon_number ?? 0],
+          },
+        });
+      },
     }
   )
 );

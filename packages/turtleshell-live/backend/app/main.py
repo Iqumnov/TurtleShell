@@ -204,8 +204,8 @@ def health_check():
 def configure_simulation(config: ConfigUpdate):
     with sim_lock:
         rebuild_qpu = False
-        allocations_updated = False
-        
+        needs_alloc_update = False
+
         if config.qpu_type is not None and config.qpu_type != sim.qpu_type:
             sim.qpu_type = config.qpu_type
             rebuild_qpu = True
@@ -217,19 +217,16 @@ def configure_simulation(config: ConfigUpdate):
             sim.n_ions = config.n_ions
             if "trapped_ion" in sim.qpu_type:
                 rebuild_qpu = True
-                
+
         if rebuild_qpu:
             sim.rebuild_qpu()
-            allocations_updated = True
-            
+
         if config.tenant_count is not None:
             sim.tenant_count = config.tenant_count
-            sim.update_allocations()
-            allocations_updated = True
+            needs_alloc_update = True
         if config.scheduling_algo is not None:
             sim.scheduling_algo = config.scheduling_algo
-            sim.update_allocations()
-            allocations_updated = True
+            needs_alloc_update = True
         if config.active_scenario is not None:
             sim.active_scenario = config.active_scenario
         if config.crosstalk_intensity is not None:
@@ -246,8 +243,7 @@ def configure_simulation(config: ConfigUpdate):
             sim.snr_db = config.snr_db
         if config.defense_l1 is not None:
             sim.defense_l1 = config.defense_l1
-            sim.update_allocations()
-            allocations_updated = True
+            needs_alloc_update = True
         if config.defense_l2 is not None:
             sim.defense_l2 = config.defense_l2
         if config.defense_l3 is not None:
@@ -260,8 +256,8 @@ def configure_simulation(config: ConfigUpdate):
             sim.utilization = float(config.utilization)
         if config.playback_speed is not None:
             sim.playback_speed = float(config.playback_speed)
-            
-        if rebuild_qpu and not allocations_updated:
+
+        if needs_alloc_update:
             sim.update_allocations()
         return {"status": "ok", "message": "Configuration updated"}
 
@@ -592,7 +588,7 @@ def run_single_simulation_tick() -> Dict[str, Any]:
     payload = {
         "time_step": sim.time_step,
         "fidelity": round(current_fidelity, 4),
-        "fidelity_drop": round(float(base_benchmark_fidelity - current_fidelity) * 100, 2),
+        "fidelity_drop": round(max(0.0, float(base_benchmark_fidelity - current_fidelity)) * 100, 2),
         "average_t1": round(float(np.mean([q.t1 for q in sim.qpu.qubits.values()])), 2),
         "average_t2": round(float(np.mean([q.t2 for q in sim.qpu.qubits.values()])), 2),
         "anomaly_score_l2": round(l2_conf, 4),
@@ -634,12 +630,19 @@ def run_single_simulation_tick() -> Dict[str, Any]:
 
 connected_clients: Set[WebSocket] = set()
 
+def _step_simulation_sync() -> tuple[Dict[str, Any], float]:
+    with sim_lock:
+        payload = run_single_simulation_tick()
+        speed = float(sim.playback_speed)
+    return payload, speed
+
+
 async def global_simulation_loop():
-    """Single global simulation loop ticking strictly once per 100ms."""
+    """Single global simulation loop ticking cleanly off the asyncio event loop."""
     while True:
+        speed = 1.0
         try:
-            with sim_lock:
-                payload = run_single_simulation_tick()
+            payload, speed = await asyncio.to_thread(_step_simulation_sync)
             if connected_clients:
                 sanitized = sanitize_payload(payload)
                 dead_clients = set()
@@ -651,8 +654,6 @@ async def global_simulation_loop():
                 connected_clients.difference_update(dead_clients)
         except Exception as ex:
             print(f"Transient error in global simulation loop: {ex}")
-        
-        speed = sim.playback_speed
         await asyncio.sleep(max(0.02, 0.1 / max(0.1, speed)))
 
 @app.websocket("/api/simulation/stream")

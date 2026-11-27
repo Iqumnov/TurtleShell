@@ -79,7 +79,7 @@ def run_crosstalk_audit(
                 dist = nx.shortest_path_length(G, t_q, r_q)
                 if dist < min_dist:
                     min_dist = dist
-            except nx.NetworkXNoPath:
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
                 pass
                 
     # Calculate fidelity analytically or via simulator execution

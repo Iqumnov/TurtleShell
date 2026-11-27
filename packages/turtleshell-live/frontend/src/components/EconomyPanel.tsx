@@ -46,7 +46,7 @@ export const EconomyPanel: React.FC = () => {
     : (metrics.cumulative_wasted_cash ?? 0);
   const displayDropPct  = isScrubbing
     ? Math.max(0.0, (baseFidelity - displayFidelity) * 100.0)
-    : metrics.fidelity_drop;
+    : Math.max(0.0, metrics.fidelity_drop);
   const parsedLabelStep = isScrubbing && history.labels[activeIndex]
     ? parseInt(history.labels[activeIndex].replace('#', ''), 10)
     : metrics.time_step;
@@ -97,12 +97,13 @@ export const EconomyPanel: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           {cards.map((card, i) => (
             <div key={i} className="p-2 hud-inset flex flex-col gap-0.5 flex-1 min-w-[130px]">
-              <span className="text-xs text-[var(--text-muted)] uppercase font-bold leading-tight">{card.label}</span>
+              <span className="text-xs text-[var(--text-muted)] font-bold leading-tight">{card.label}</span>
               {(card as any).isSlider ? (
                 <>
                   <span className="text-base font-bold font-mono">{(card as any).display}</span>
                   <input
                     type="range"
+                    aria-label={card.label}
                     min={(card as any).sliderProps.min}
                     max={(card as any).sliderProps.max}
                     step={(card as any).sliderProps.step}
@@ -120,10 +121,10 @@ export const EconomyPanel: React.FC = () => {
 
         {/* Break-even chart */}
         <div className="flex flex-col gap-1.5">
-          <span className="font-bold text-[var(--text-muted)] uppercase text-xs">{t.cumulativeLossOpex}</span>
+          <span className="font-bold text-[var(--text-muted)] text-xs">{t.cumulativeLossOpex}</span>
           <div className="h-40 w-full hud-inset p-1.5 bg-[var(--bg-color)]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 15, left: 30, bottom: 5 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 12, left: 6, bottom: 5 }}>
                 <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
                 <YAxis
                   stroke="var(--text-muted)"
@@ -131,7 +132,7 @@ export const EconomyPanel: React.FC = () => {
                   padding={{ top: 15, bottom: 0 }}
                   fontSize={10}
                   tickLine={false}
-                  width={48}
+                  width={44}
                   tickFormatter={(v) => '$' + smartTick(v)}
                 />
                 <Tooltip
